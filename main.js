@@ -666,9 +666,10 @@ async function submitOrder(e) {
   
   if (error) { toast(error.message, 'error'); btn.textContent = originalText; btn.disabled = false; return; }
   
-  await supabase.from('notifications').insert({ user_id: session.user.id, order_id: data.id, type: 'order_created', title: 'طلب جديد', body: `تم استلام طلبك وجاري مراجعته.` })
+  // Notifications are written by trusted server-side workflows; customer-side
+  // INSERT is intentionally not allowed by the database RLS policy.
   
-  // Notify administrators through the authenticated server-side Edge Function.
+  // Notify administrators through the authenticated server-side API.
   await sendPushNotification('order_created', data.id);
   
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
@@ -726,11 +727,20 @@ async function openPayModal(id) {
     if (!receipt) { toast('يرجى اختيار صورة التحويل', 'error'); return }
     const btn = document.querySelector('#submitLatePay')
     btn.textContent = 'جاري الرفع...'; btn.disabled = true
-    const path = `${session.user.id}/${crypto.randomUUID()}-${receipt.name.replace(/[^\w.\-]+/g,'_')}`
-    const up = await supabase.storage.from('receipts').upload(path, receipt)
+    const safeName = receipt.name.replace(/[^\w.\-]+/g,'_').slice(-100) || 'receipt.jpg'
+    const path = `${session.user.id}/${id}/${crypto.randomUUID()}-${safeName}`
+    const up = await supabase.storage.from('payment-proofs').upload(path, receipt, { upsert: false, contentType: receipt.type || 'image/jpeg' })
     if (up.error) { toast(up.error.message, 'error'); btn.textContent = 'تأكيد الرفع'; btn.disabled = false; return }
-    await supabase.from('orders').update({ payment_proof_url: path, updated_at: new Date().toISOString() }).eq('id', id)
-    toast('تم استلام إثبات الدفع بنجاح', 'success')
+    const { data: receiptId, error: submitError } = await supabase.rpc('submit_payment_receipt', {
+      p_order_id: id,
+      p_storage_path: path,
+      p_review_note: null
+    })
+    if (submitError) {
+      await supabase.storage.from('payment-proofs').remove([path])
+      toast(submitError.message, 'error'); btn.textContent = 'تأكيد الرفع'; btn.disabled = false; return
+    }
+    toast('تم استلام إثبات الدفع وإرساله للمراجعة', 'success')
     document.querySelector('#payModal').remove()
     await render()
   }
@@ -938,8 +948,9 @@ async function saveOrder(id) {
 async function viewReceipt(id) {
   const o=orders.find(x=>x.id===id)
   if(!o?.payment_proof_url)return
-  const {data}=await supabase.storage.from('receipts').createSignedUrl(o.payment_proof_url,600)
-  if(data) window.open(data.signedUrl,'_blank')
+  const {data,error}=await supabase.storage.from('payment-proofs').createSignedUrl(o.payment_proof_url,600)
+  if(error) return toast(error.message,'error')
+  if(data?.signedUrl) window.open(data.signedUrl,'_blank')
 }
 
 async function saveSettings() {
