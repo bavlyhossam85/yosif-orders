@@ -611,6 +611,11 @@ function newOrderView(prefill={}) {
     <input id="oImages" type="file" accept="image/*" multiple style="margin-bottom: 12px; font-size:13px;">
     
     <div><label>البقشيش (للمندوب - اختياري)</label><select id="oTip"><option value="0">بدون</option><option value="5">5 جنيه</option><option value="10">10 جنيه</option><option value="15">15 جنيه</option></select></div>
+
+    <div class="grid2">
+      <label>كود الخصم (اختياري)<select id="oCoupon"><option value="">بدون كوبون</option>\${activeCoupons.map(c=>\`<option value="\${esc(c.code)}">\${esc(c.title||c.code)} · \${esc(c.code)}</option>\`).join('')}</select></label>
+      <label>مكافأة تستخدمها (اختياري)<select id="oReward"><option value="">بدون مكافأة</option>\${customerRewards.filter(r=>!r.expires_at||new Date(r.expires_at)>new Date()).map(r=>\`<option value="\${r.id}">\${esc(r.reward_type==='percentage_discount'?\`خصم \${r.reward_value}%\`:r.reward_type==='fixed_discount'?\`خصم \${money(r.reward_value)}\`:r.reward_type==='free_delivery'?'توصيل مجاني':r.reward_type==='wallet_credit'?\`رصيد \${money(r.reward_value)}\`:r.reward_type)}</option>\`).join('')}</select></label>
+    </div>
     
     <label>طريقة الدفع</label>
     <div class="pay-options">
@@ -829,6 +834,15 @@ async function submitOrder(e) {
   })
   
   if (error) { toast(error.message, 'error'); btn.textContent = originalText; btn.disabled = false; return; }
+
+  const couponCode = document.querySelector('#oCoupon')?.value || null;
+  const rewardId = document.querySelector('#oReward')?.value || null;
+  if (couponCode || rewardId) {
+    const { error: promoError } = await supabase.rpc('set_order_promotions', {
+      p_order_id: data.id, p_coupon_code: couponCode, p_reward_id: rewardId
+    });
+    if (promoError) toast('تم إنشاء الطلب، لكن تعذر ربط الخصم: ' + promoError.message, 'error');
+  }
   
   // Notifications are written by trusted server-side workflows; customer-side
   // INSERT is intentionally not allowed by the database RLS policy.
@@ -932,7 +946,7 @@ function renderAdmin() {
 }
 
 function customerRewardsView() {
-  const rewardLabel = r => r.reward_type === 'discount' ? `خصم ${Number(r.reward_value)}%` : r.reward_type === 'free_delivery' ? 'توصيل مجاني' : `${money(r.reward_value)} رصيد`;
+  const rewardLabel = r => r.reward_type === 'percentage_discount' ? `خصم ${Number(r.reward_value)}%` : r.reward_type === 'fixed_discount' ? `خصم ${money(r.reward_value)}` : r.reward_type === 'free_delivery' ? 'توصيل مجاني' : r.reward_type === 'wallet_credit' ? `${money(r.reward_value)} رصيد` : r.reward_type;
   const transactions = walletTransactions.map(t => `<div class="wallet-ledger-row"><div><b>${esc(t.description || t.transaction_type || 'حركة رصيد')}</b><small>${fmtDate(t.created_at)}</small></div><strong>${['admin_debit','order_debit'].includes(t.transaction_type) ? '−' : '+'}${money(t.amount)}</strong></div>`).join('') || '<div class="empty">لا توجد حركات على المحفظة حتى الآن.</div>';
   const rewards = customerRewards.map(r => `<div class="reward-row"><b>${esc(rewardLabel(r))}</b><small>صالحة حتى ${r.expires_at ? fmtDate(r.expires_at) : 'بدون تاريخ انتهاء'}</small></div>`).join('') || '<div class="empty">لا توجد مكافآت متاحة حالياً.</div>';
   const coupons = activeCoupons.map(c => `<div class="reward-row"><div><b>${esc(c.title || c.code)}</b><small>${esc(c.code)} · ${c.discount_type === 'percentage' || c.discount_type === 'percent' ? `${c.discount_value}%` : money(c.discount_value)}</small></div></div>`).join('') || '<div class="empty">لا توجد كوبونات متاحة حالياً.</div>';
@@ -1198,20 +1212,27 @@ async function deleteProduct(id) {
 }
 
 async function saveOrder(id) {
-  const price=Number(document.querySelector(`.priceEdit[data-id="${id}"]`).value||0), shipping=Number(document.querySelector(`.shippingEdit[data-id="${id}"]`).value||0), tip=Number(document.querySelector(`.tipEdit[data-id="${id}"]`).value||0), status=document.querySelector(`.statusEdit[data-id="${id}"]`).value, o=orders.find(x=>x.id===id)
-  let fee = 0; if (o.payment_method === 'instapay') fee = 2; else if (o.payment_method === 'wallet') fee = (price + shipping) * 0.01; 
-  const totalWithFees = price + shipping + tip + fee
-  await supabase.from('orders').update({ subtotal: price, shipping_fee: shipping, tip: tip, payment_fee: fee, total: totalWithFees, status: status, updated_at: new Date().toISOString() }).eq('id',id)
-  
-  await supabase.from('order_events').insert({ order_id: id, status: status, note: `تحديث الحالة: ${statusLabel(status, o.payment_method)}` })
-  // The authenticated server endpoint persists the in-app notification and
-  // sends the matching OneSignal push, avoiding duplicate notification rows.
+  const price=Number(document.querySelector(\`.priceEdit[data-id="\${id}"]\`).value||0);
+  const shipping=Number(document.querySelector(\`.shippingEdit[data-id="\${id}"]\`).value||0);
+  const tip=Number(document.querySelector(\`.tipEdit[data-id="\${id}"]\`).value||0);
+  const status=document.querySelector(\`.statusEdit[data-id="\${id}"]\`).value;
+  const o=orders.find(x=>x.id===id);
+  if (!o) return;
+  let result;
+  if (status === 'cancelled') {
+    if (!confirm(\`تأكيد إلغاء الطلب #\${o.order_no}؟ سيتم رد أي مبلغ مدفوع من المحفظة تلقائياً.\`)) return;
+    result = await supabase.rpc('admin_cancel_order', { p_order_id: id, p_note: 'تم إلغاء الطلب من الإدارة' });
+  } else {
+    result = await supabase.rpc('admin_save_order_pricing', {
+      p_order_id: id, p_subtotal: price, p_shipping_fee: shipping, p_tip: tip, p_status: status
+    });
+  }
+  if (result.error) return toast(result.error.message, 'error');
   await sendPushNotification('order_updated', o.id);
-
-  toast('تم الحفظ','success'); beep();
-  await render()
+  toast(status === 'cancelled' ? 'تم إلغاء الطلب وتسوية المحفظة إن وُجدت' : 'تم حفظ التسعير أو تحديث حالة الطلب', 'success');
+  beep();
+  await render();
 }
-
 async function viewReceipt(id) {
   const o=orders.find(x=>x.id===id)
   if(!o?.payment_proof_url)return
