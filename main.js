@@ -10,6 +10,7 @@ let supabase
 let session = null
 let profile = null
 let products = []
+let categories = []
 let settings = {}
 let orders = []
 let notifications = []
@@ -246,12 +247,15 @@ async function loadCommon() {
   let pQuery = supabase.from('products').select('*').order('created_at', {ascending:false});
   if (!isAdmin()) pQuery = pQuery.eq('active', true);
 
-  const [p, s, n] = await Promise.all([
+  const [p, c, s, n] = await Promise.all([
     pQuery,
+    supabase.from('categories').select('*').order('sort_order', { ascending: true }),
     supabase.from('settings').select('*'),
     supabase.from('notifications').select('*').eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(50)
   ])
   if (p.error) throw p.error
+  if (c.error) throw c.error
+  categories = c.data || []
   if (s.data) settings = Object.fromEntries(s.data.filter(x => x.key !== 'onesignal_rest_api_key_encrypted').map(x => [x.key, x]))
   if (n.error) throw n.error
   products = p.data || []
@@ -414,6 +418,8 @@ function customerHome() {
   <div class="section-head"><h3>آخر الطلبات</h3></div>${latest}`
 }
 
+function categoryName(id) { return categories.find(x => x.id === id)?.name || '' }
+
 function normalizeArabic(value='') {
   return String(value).toLowerCase().normalize('NFD')
     .replace(/[\u064B-\u065F\u0670\u0640]/g, '')
@@ -438,10 +444,10 @@ function toggleFavorite(id) {
 }
 function customerProducts() {
   const isClosed = getSetting('store_status', 'open') === 'closed';
-  const categories = ['الكل', ...new Set(products.map(p => p.category).filter(Boolean))]
-  const visible = products.filter(p => (activeCategory==='الكل' || p.category===activeCategory) && fuzzyMatch(`${p.name} ${p.unit||''} ${p.category||''}`, productSearch))
+  const categoryTabs = [{id:'الكل',name:'الكل',icon:'🛍️'}, ...categories.filter(c=>c.active || isAdmin()).map(c=>({id:c.id,name:c.name,icon:c.icon||'📦'}))]
+  const visible = products.filter(p => (activeCategory==='الكل' || p.category_id===activeCategory) && fuzzyMatch(`${p.name} ${p.unit||''} ${categoryName(p.category_id)}`, productSearch))
   return `<div class="section-head"><h3>المنتجات</h3><span class="muted">${visible.length} منتج</span></div>
-  <div class="product-tools"><input id="productSearch" type="search" value="${esc(productSearch)}" placeholder="ابحث عن منتج... مثال: لبن، جبنه، سكر"><div class="category-tabs">${categories.map(c=>`<button class="category-tab ${activeCategory===c?'active':''}" data-category="${esc(c)}">${esc(c)}</button>`).join('')}</div></div>
+  <div class="product-tools"><input id="productSearch" type="search" value="${esc(productSearch)}" placeholder="ابحث عن منتج... مثال: لبن، جبنه، سكر"><div class="category-tabs">${categoryTabs.map(c=>`<button class="category-tab ${activeCategory===c.id?'active':''}" data-category="${esc(c.id)}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div></div>
   <div class="product-grid">${visible.map(p=>`<div class="product-card">
     ${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="product-placeholder">🛍️</div>`}
     <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${money(p.unit_price)} /${esc(p.unit)}</div>
@@ -820,10 +826,11 @@ function adminOrderCard(o) {
 }
 
 function adminProducts() {
-  return `<div class="card"><h3>➕ إضافة منتج جديد</h3><form id="productForm" class="grid2">
+  return `<div class="card"><h3>🗂️ إدارة الأقسام</h3><form id="categoryForm" class="grid2"><label>اسم القسم<input id="categoryName" required maxlength="80"></label><label>الأيقونة (Emoji)<input id="categoryIcon" maxlength="8" placeholder="🥛"></label><button class="primary" type="submit">إضافة القسم</button></form><div class="muted">${categories.map(c=>`${esc(c.icon||'📦')} ${esc(c.name)} ${c.active?'':'(مخفي)' }`).join(' • ')}</div></div><div class="card"><h3>➕ إضافة منتج جديد</h3><form id="productForm" class="grid2">
     <label>اسم المنتج<input id="pName" required></label>
     <label>السعر<input id="pPrice" type="number" min="0" step="0.01" required></label>
     <label>الوحدة<input id="pUnit" value="وحدة"></label>
+    <label>القسم<select id="pCategory"><option value="">بدون قسم</option>${categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
     <label>الصورة<input id="pImage" type="file" accept="image/*"></label>
     <button class="primary" type="submit">إضافة المنتج</button>
   </form></div>
@@ -858,6 +865,7 @@ function adminSettings() {
 
 function wireAdminEvents() {
   document.querySelector('#productForm')?.addEventListener('submit',addProduct)
+  document.querySelector('#categoryForm')?.addEventListener('submit',addCategory)
   document.querySelectorAll('[data-update-product]').forEach(b=>b.onclick=()=>updateProduct(b.dataset.updateProduct))
   document.querySelectorAll('[data-toggle-product]').forEach(b=>b.onclick=()=>toggleProduct(b.dataset.toggleProduct))
   document.querySelectorAll('[data-delete-product]').forEach(b=>b.onclick=()=>deleteProduct(b.dataset.deleteProduct))
@@ -896,16 +904,27 @@ function filterAdminOrders() {
   })
 }
 
+async function addCategory(e) {
+  e.preventDefault()
+  const name=document.querySelector('#categoryName').value.trim()
+  const icon=document.querySelector('#categoryIcon').value.trim() || '📦'
+  if(!name) return
+  const {error}=await supabase.from('categories').insert({name,icon,active:true,sort_order:categories.length+1})
+  if(error) return toast(error.message,'error')
+  toast('تمت إضافة القسم','success'); await render()
+}
+
 async function addProduct(e) {
   e.preventDefault()
-  const name=document.querySelector('#pName').value.trim(), unit_price=Number(document.querySelector('#pPrice').value||0), unit=document.querySelector('#pUnit').value.trim()
+  const name=document.querySelector('#pName').value.trim(), unit_price=Number(document.querySelector('#pPrice').value||0), unit=document.querySelector('#pUnit').value.trim(), category_id=document.querySelector('#pCategory')?.value||null
   let image_url=null; const file=document.querySelector('#pImage').files?.[0]
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
     if (!up.error) image_url=supabase.storage.from('products').getPublicUrl(path).data.publicUrl
   }
-  await supabase.from('products').insert({name,unit_price,unit,image_url,active:true})
+  const {error:insertError}=await supabase.from('products').insert({name,unit_price,unit,category_id,image_url,active:true})
+  if(insertError) return toast(insertError.message,'error')
   toast('تمت الإضافة','success'); await render()
 }
 
