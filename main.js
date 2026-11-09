@@ -613,8 +613,8 @@ function newOrderView(prefill={}) {
     <div><label>البقشيش (للمندوب - اختياري)</label><select id="oTip"><option value="0">بدون</option><option value="5">5 جنيه</option><option value="10">10 جنيه</option><option value="15">15 جنيه</option></select></div>
 
     <div class="grid2">
-      <label>كود الخصم (اختياري)<select id="oCoupon"><option value="">بدون كوبون</option>\${activeCoupons.map(c=>\`<option value="\${esc(c.code)}">\${esc(c.title||c.code)} · \${esc(c.code)}</option>\`).join('')}</select></label>
-      <label>مكافأة تستخدمها (اختياري)<select id="oReward"><option value="">بدون مكافأة</option>\${customerRewards.filter(r=>!r.expires_at||new Date(r.expires_at)>new Date()).map(r=>\`<option value="\${r.id}">\${esc(r.reward_type==='percentage_discount'?\`خصم \${r.reward_value}%\`:r.reward_type==='fixed_discount'?\`خصم \${money(r.reward_value)}\`:r.reward_type==='free_delivery'?'توصيل مجاني':r.reward_type==='wallet_credit'?\`رصيد \${money(r.reward_value)}\`:r.reward_type)}</option>\`).join('')}</select></label>
+      <label>كود الخصم (اختياري)<select id="oCoupon"><option value="">بدون كوبون</option>${activeCoupons.map(c=>`<option value="${esc(c.code)}">${esc(c.title||c.code)} · ${esc(c.code)}</option>`).join('')}</select></label>
+      <label>مكافأة تستخدمها (اختياري)<select id="oReward"><option value="">بدون مكافأة</option>${customerRewards.filter(r=>!r.expires_at||new Date(r.expires_at)>new Date()).map(r=>`<option value="${r.id}">${esc(r.reward_type==='percentage_discount'?`خصم ${r.reward_value}%`:r.reward_type==='fixed_discount'?`خصم ${money(r.reward_value)}`:r.reward_type==='free_delivery'?'توصيل مجاني':r.reward_type==='wallet_credit'?`رصيد ${money(r.reward_value)}`:r.reward_type)}</option>`).join('')}</select></label>
     </div>
     
     <label>طريقة الدفع</label>
