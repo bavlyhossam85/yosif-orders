@@ -369,11 +369,13 @@ function shell(title, nav, content) {
       ${nav}
     </aside>
     <main class="content"><div class="page-title"><h1>${title}</h1></div>${content}</main>
-  </div>`
+  </div>
+  ${!isAdmin() ? `<button type="button" id="cartQuickBtn" class="floating-cart" aria-label="فتح السلة">🛒 <span>${cart.reduce((n,x)=>n+Number(x.quantity||0),0)}</span></button>` : ''}`
   
   document.querySelector('#logoutBtn').onclick=logout
   document.querySelector('#notifBtn').onclick=showNotifications
   document.querySelector('#themeBtn').onclick=toggleTheme
+  document.querySelector('#cartQuickBtn')?.addEventListener('click',()=>{customerView='new';renderCustomer()})
   
   const installBtn = document.querySelector('#installBtn');
   if (installBtn) {
