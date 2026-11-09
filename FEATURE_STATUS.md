@@ -6,6 +6,8 @@
 - Added a local-persisted cart with quantity controls, per-item notes, product option selection, cross-sell suggestions, WhatsApp sharing, and a floating cart shortcut. Product selections now become real `order_items` through the RPC.
 - Connected category filters and admin category creation to the actual `categories` table.
 - Added customer wishlist synchronization through the `wishlists` table and customer-side flash-sale countdowns. Admin product cards can configure sale price and schedule. Sale price is rechecked by the order RPC.
+- Added customer product review submission and an admin review moderation screen. Customers can submit a review only for delivered products once the RLS migration is applied; new reviews are hidden pending admin approval.
+- Admin can configure product option groups in JSON; customers can select available choices before adding the product to cart. Option-specific price adjustments are not yet supported.
 - Added scheduled delivery datetime and GPS coordinate persistence, plus map links in customer/admin order cards.
 - Customer payment proof upload now targets the private `payment-proofs` bucket and calls `submit_payment_receipt`; it no longer attempts a customer-side UPDATE of the sensitive `orders` row.
 - Admin receipt review controls call the `review_payment_receipt` RPC. Receipt previews use short-lived signed URLs from the private bucket.
