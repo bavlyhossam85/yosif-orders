@@ -966,6 +966,7 @@ function adminProducts() {
     <label>السعر<input id="pPrice" type="number" min="0" step="0.01" required></label>
     <label>الوحدة<input id="pUnit" value="وحدة"></label>
     <label>القسم<select id="pCategory"><option value="">بدون قسم</option>${categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+    <label>خيارات المنتج (JSON اختياري)<textarea id="pOptions" rows="2" placeholder='[{"name":"الحجم","values":["صغير","كبير"]}]'></textarea></label>
     <label>الصورة<input id="pImage" type="file" accept="image/*"></label>
     <button class="primary" type="submit">إضافة المنتج</button>
   </form></div>
@@ -980,6 +981,7 @@ function adminProducts() {
       <label style="display:flex;align-items:center;gap:8px;"><input class="editFlash" data-id="${p.id}" type="checkbox" ${p.is_flash_sale?'checked':''} style="width:auto;"> عرض مؤقت</label>
       <div class="grid2" style="gap:6px;"><input class="editSalePrice" data-id="${p.id}" type="number" min="0" step="0.01" value="${p.sale_price??''}" placeholder="سعر العرض"><input class="editSaleStart" data-id="${p.id}" type="datetime-local" value="${toLocalDateTime(p.sale_starts_at)}"></div>
       <label>نهاية العرض<input class="editSaleEnd" data-id="${p.id}" type="datetime-local" value="${toLocalDateTime(p.sale_ends_at)}"></label>
+      <label>خيارات المنتج (JSON)<textarea class="editOptions" data-id="${p.id}" rows="2">${esc(JSON.stringify(p.options||[]))}</textarea></label>
       <input class="editImage" data-id="${p.id}" type="file" accept="image/*" style="font-size:11px; padding:4px; margin-top:5px;">
       <div class="actions" style="margin-top:10px; display:flex; gap:6px;">
         <button class="primary small" data-update-product="${p.id}">💾 حفظ</button>
@@ -1056,13 +1058,14 @@ async function addCategory(e) {
 async function addProduct(e) {
   e.preventDefault()
   const name=document.querySelector('#pName').value.trim(), unit_price=Number(document.querySelector('#pPrice').value||0), unit=document.querySelector('#pUnit').value.trim(), category_id=document.querySelector('#pCategory')?.value||null
+  let options=[];try{const raw=document.querySelector('#pOptions')?.value.trim();options=raw?JSON.parse(raw):[];if(!Array.isArray(options))throw new Error('يجب أن تكون الخيارات مصفوفة JSON')}catch(err){return toast('صيغة خيارات المنتج غير صحيحة: '+err.message,'error')}
   let image_url=null; const file=document.querySelector('#pImage').files?.[0]
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
     if (!up.error) image_url=supabase.storage.from('products').getPublicUrl(path).data.publicUrl
   }
-  const {error:insertError}=await supabase.from('products').insert({name,unit_price,unit,category_id,image_url,active:true})
+  const {error:insertError}=await supabase.from('products').insert({name,unit_price,unit,category_id,options,image_url,active:true})
   if(insertError) return toast(insertError.message,'error')
   toast('تمت الإضافة','success'); await render()
 }
@@ -1077,7 +1080,8 @@ async function updateProduct(id) {
   const sale_starts_at=saleStartRaw?new Date(saleStartRaw).toISOString():null
   const sale_ends_at=saleEndRaw?new Date(saleEndRaw).toISOString():null
   if(flash && (!Number.isFinite(sale_price)||sale_price<=0||sale_price>=unit_price||!sale_ends_at||(sale_starts_at&&new Date(sale_ends_at)<=new Date(sale_starts_at)))) return toast('راجع سعر وموعد بداية ونهاية العرض','error')
-  const updateData = { name, unit_price, unit, is_flash_sale:flash, sale_price, sale_starts_at, sale_ends_at }
+  let options=[];try{options=JSON.parse(document.querySelector(`.editOptions[data-id="${id}"]`)?.value||'[]');if(!Array.isArray(options))throw new Error('يجب أن تكون مصفوفة JSON')}catch(err){return toast('صيغة خيارات المنتج غير صحيحة: '+err.message,'error')}
+  const updateData = { name, unit_price, unit, options, is_flash_sale:flash, sale_price, sale_starts_at, sale_ends_at }
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
