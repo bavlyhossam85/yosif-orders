@@ -82,7 +82,6 @@ declare
   v_base numeric(12,2);
   v_coupon_type text;
   v_reward_type text;
-  v_wallet_credit numeric(12,2):=0;
 begin
   if not public.is_admin() then raise exception 'Admin only'; end if;
   if p_status not in ('priced','preparing','courier_near','out_for_delivery','delivered') then
@@ -96,6 +95,7 @@ begin
 
   select * into v_order from public.orders where id=p_order_id for update;
   if not found then raise exception 'Order not found'; end if;
+  if v_order.status='cancelled' then raise exception 'Cancelled orders cannot be reopened'; end if;
   if v_order.status <> 'pending_review' then
     -- Subsequent status transitions do not re-charge or re-apply promotions.
     update public.orders set status=p_status,updated_at=now() where id=p_order_id;
@@ -105,6 +105,15 @@ begin
   end if;
 
   v_shipping := p_shipping_fee;
+  if v_order.reward_id is not null then
+    select * into v_reward from public.customer_rewards
+    where id=v_order.reward_id and user_id=v_order.customer_id and used_at is null
+      and (expires_at is null or expires_at > now())
+    for update;
+    if not found then raise exception 'Selected reward is no longer available'; end if;
+    v_reward_type := lower(v_reward.reward_type);
+    if v_reward_type='free_delivery' then v_shipping := 0; end if;
+  end if;
   v_base := p_subtotal + v_shipping;
 
   if v_order.coupon_id is not null then
@@ -127,21 +136,11 @@ begin
   end if;
 
   if v_order.reward_id is not null then
-    select * into v_reward from public.customer_rewards
-    where id=v_order.reward_id and user_id=v_order.customer_id and used_at is null
-      and (expires_at is null or expires_at > now())
-    for update;
-    if not found then raise exception 'Selected reward is no longer available'; end if;
-    v_reward_type := lower(v_reward.reward_type);
-    if v_reward_type='free_delivery' then
-      v_shipping := 0;
-    elsif v_reward_type='percentage_discount' then
+    if v_reward_type='percentage_discount' then
       v_reward_discount := round(greatest(0,v_base-v_coupon_discount) * least(greatest(v_reward.reward_value,0),100) / 100,2);
     elsif v_reward_type='fixed_discount' then
       v_reward_discount := least(greatest(v_reward.reward_value,0),greatest(0,v_base-v_coupon_discount));
-    elsif v_reward_type='wallet_credit' then
-      v_wallet_credit := greatest(v_reward.reward_value,0);
-    else
+    elsif v_reward_type <> 'free_delivery' then
       raise exception 'Selected reward type cannot be redeemed at checkout';
     end if;
     update public.customer_rewards set used_at=now() where id=v_reward.id;
@@ -155,17 +154,11 @@ begin
   end if;
   v_total := greatest(0,p_subtotal+v_shipping+p_tip-v_discount+v_fee);
 
-  if v_order.payment_method='wallet' or v_wallet_credit>0 then
+  if v_order.payment_method='wallet' then
     insert into public.wallets(user_id,balance) values(v_order.customer_id,0)
       on conflict(user_id) do nothing;
     select balance into v_wallet from public.wallets where user_id=v_order.customer_id for update;
-    if v_wallet_credit>0 then
-      update public.wallets set balance=balance+v_wallet_credit,updated_at=now() where user_id=v_order.customer_id;
-      v_wallet:=v_wallet+v_wallet_credit;
-      insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
-        values(v_order.customer_id,v_wallet_credit,v_wallet,auth.uid(),'reward_credit','إضافة مكافأة رصيد',p_order_id);
-    end if;
-    if v_order.payment_method='wallet' and v_total>0 then
+    if v_total>0 then
       if v_wallet < v_total then raise exception 'Insufficient wallet balance: required %, available %',v_total,v_wallet; end if;
       update public.wallets set balance=v_wallet-v_total,updated_at=now() where user_id=v_order.customer_id;
       insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
