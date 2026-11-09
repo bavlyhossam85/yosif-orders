@@ -1,7 +1,1 @@
 project_id = "xsyhrxivvtqdernqxvyw"
-
-[functions.send-onesignal-push]
-verify_jwt = true
-
-[functions.send-abandoned-cart-reminders]
-verify_jwt = false
