@@ -1097,7 +1097,12 @@ async function saveOrder(id) {
 async function viewReceipt(id) {
   const o=orders.find(x=>x.id===id)
   if(!o?.payment_proof_url)return
-  const {data,error}=await supabase.storage.from('payment-proofs').createSignedUrl(o.payment_proof_url,600)
+  let {data,error}=await supabase.storage.from('payment-proofs').createSignedUrl(o.payment_proof_url,600)
+  // Legacy compatibility for receipts uploaded before the private bucket migration.
+  if(error) {
+    const legacy=await supabase.storage.from('receipts').createSignedUrl(o.payment_proof_url,600)
+    data=legacy.data; error=legacy.error
+  }
   if(error) return toast(error.message,'error')
   if(data?.signedUrl) window.open(data.signedUrl,'_blank')
 }
