@@ -913,7 +913,7 @@ function adminOrderCard(o) {
 
   return `<article class="order-card admin-order" data-search="${esc(`${o.order_no}${o.customer_notes}${o.customer_id}${o.phone||''}`.toLowerCase())}">
     <div class="row"><div><b>#${o.order_no}</b><div class="muted">${fmtDate(o.created_at)}</div></div><span class="status ${statusClass(o.status)}">${statusLabel(o.status, o.payment_method)}</span></div>
-    <h3>${esc(o.custom_request)}</h3>${orderItemsHtml(o.id)}<p>${renderNotes(o.customer_notes)}</p>
+    <h3>${esc(o.custom_request)}</h3>${orderFulfillmentMeta(o)}${orderItemsHtml(o.id)}<p>${renderNotes(o.customer_notes)}</p>
     ${o.phone ? `<div class="muted">📱 ${esc(o.phone)}</div>` : ''}
     ${imagesHtml}
     
