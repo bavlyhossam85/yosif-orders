@@ -1,0 +1,27 @@
+name: Build check
+
+on:
+  push:
+    branches:
+      - audit/fix-security-and-push-2026-11-09
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm install
+      - name: Build Vite app
+        run: npm run build
