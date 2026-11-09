@@ -1073,7 +1073,7 @@ function adminOrderCard(o) {
     
     <div class="grid2" style="margin-top: 10px;">
       <label>سعر الطلبات<input type="number" class="priceEdit" data-id="${o.id}" value="${o.subtotal||0}" ${o.status==='pending_review'?'':'disabled'}></label>
-      <label>رسوم التوصيل<input type="number" class="shippingEdit" data-id="${o.id}" value="${o.shipping_fee||0}" ${o.status==='pending_review'?'':'disabled'}></label>
+      <label>${o.latitude!=null && o.longitude!=null?'رسوم التوصيل (تلقائي حسب المنطقة)':'رسوم التوصيل (يدوي)'}<input type="number" class="shippingEdit" data-id="${o.id}" value="${o.shipping_fee||0}" ${o.status==='pending_review' && !(o.latitude!=null && o.longitude!=null)?'':'disabled'}></label>
     </div>
     <div class="grid2" style="margin-top: 8px;">
       <label>البقشيش<input type="number" class="tipEdit" data-id="${o.id}" value="${o.tip||0}" ${o.status==='pending_review'?'':'disabled'}></label>
