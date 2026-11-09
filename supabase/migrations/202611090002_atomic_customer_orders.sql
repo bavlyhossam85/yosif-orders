@@ -41,6 +41,15 @@ begin
     raise exception 'Unsupported payment method';
   end if;
   if coalesce(p_tip,0) < 0 or p_tip > 10000 then raise exception 'Invalid tip'; end if;
+  if p_scheduled_for is not null and p_scheduled_for <= now() then
+    raise exception 'Scheduled time must be in the future';
+  end if;
+  if (p_latitude is null) <> (p_longitude is null) then
+    raise exception 'Both GPS coordinates are required';
+  end if;
+  if p_latitude is not null and (p_latitude < -90 or p_latitude > 90 or p_longitude < -180 or p_longitude > 180) then
+    raise exception 'Invalid GPS coordinates';
+  end if;
   if jsonb_typeof(coalesce(p_items,'[]'::jsonb)) <> 'array'
      or jsonb_array_length(coalesce(p_items,'[]'::jsonb)) > 100 then
     raise exception 'Invalid order items';
