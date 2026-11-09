@@ -385,3 +385,51 @@ input:focus,textarea:focus,select:focus{
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
 }
+
+
+/* Customer cart and timed offers */
+.floating-cart{position:fixed;bottom:22px;left:22px;z-index:30;display:flex;align-items:center;gap:9px;background:#111827;color:#fff;border-radius:999px;padding:14px 18px;box-shadow:0 12px 32px #0f172a44;font-weight:800}
+.floating-cart span{display:inline-grid;place-items:center;min-width:24px;height:24px;padding:0 6px;background:#ef4444;color:white;border-radius:999px;font-size:12px}
+.cart-lines{display:grid;gap:10px;margin:12px 0}
+.cart-line{background:var(--surface-1);border-radius:14px;padding:12px;display:grid;gap:8px}
+.cart-line .row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.flash-countdown{display:inline-block;margin:5px 0;color:#dc2626;font-weight:800}
+@media(max-width:600px){.floating-cart{bottom:14px;left:14px;padding:12px 15px}.cart-line{padding:10px}}
+
+.order-line-items{display:grid;gap:6px;margin:8px 0;padding:10px;background:var(--surface-1);border-radius:10px}.order-line-items .row{display:flex;justify-content:space-between;gap:10px}
+
+.cross-sell{margin:14px 0;padding:12px;border:1px dashed #94a3b8;border-radius:12px}.cross-sell-items{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.cross-sell-items button{max-width:100%;white-space:normal}
+
+.order-fulfillment-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.order-fulfillment-meta a{display:inline-flex;align-items:center;padding:6px 10px;border-radius:8px;background:var(--surface-2);color:inherit;text-decoration:none}
+
+.review-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid #e5e7eb}.review-row p{margin:6px 0}.review-row button{flex-shrink:0}@media(max-width:520px){.review-row{flex-direction:column}}
+
+
+/* Wallet, rewards and loyalty management */
+.wallet-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,var(--surface-1),var(--surface-2))}.wallet-summary strong{display:block;font-size:clamp(1.8rem,5vw,2.6rem);color:var(--primary);margin-top:6px}.wallet-icon{font-size:2.8rem}.wallet-ledger-row,.reward-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border,#e5e7eb)}.wallet-ledger-row:last-child,.reward-row:last-child{border-bottom:0}.wallet-ledger-row small,.reward-row small{display:block;color:var(--muted,#64748b);font-size:.8rem;margin-top:4px;overflow-wrap:anywhere}.wallet-ledger-row strong{white-space:nowrap;color:var(--primary)}.inline-check{display:flex;align-items:center;gap:8px}.inline-check input{width:auto}
+@media(max-width:520px){.wallet-summary{padding:16px}.wallet-ledger-row,.reward-row{align-items:flex-start}.wallet-ledger-row strong{font-size:.9rem}}
+
+.delivery-zone-map{height:430px;min-height:320px;border-radius:16px;border:1px solid var(--line);overflow:hidden;z-index:1;margin:12px 0}.delivery-zone-list{display:grid;gap:8px;margin-top:12px}.delivery-zone-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:var(--surface-1)}.delivery-zone-row small{display:block;color:var(--muted);margin-top:4px}@media(max-width:600px){.delivery-zone-map{height:350px}}
+
+
+/* Customer support chat */
+.floating-support{position:fixed;right:22px;bottom:22px;z-index:35;width:58px;height:58px;border-radius:50%;background:#0f766e;color:#fff;font-size:24px;box-shadow:0 12px 30px #0f172a44;touch-action:none;display:grid;place-items:center}
+.floating-support span{position:absolute;top:-4px;left:-4px;background:#ef4444;color:#fff;border-radius:999px;min-width:20px;height:20px;padding:2px 5px;font-size:11px}
+.support-layout{display:grid;grid-template-columns:minmax(220px,30%) 1fr;gap:14px;min-height:440px}
+.support-threads,.support-panel{background:var(--surface-1);border-radius:16px;padding:12px;min-width:0}
+.support-thread{display:flex;flex-direction:column;gap:5px;width:100%;text-align:right;padding:12px;border-radius:12px;background:#fff;margin-bottom:8px;position:relative}
+.support-thread.active{outline:2px solid var(--primary)}
+.support-thread small{color:#667085}
+.support-thread .badge{position:absolute;left:10px;top:10px}
+.support-messages{height:380px;overflow:auto;display:flex;flex-direction:column;gap:10px;padding:12px;background:var(--surface-2);border-radius:14px}
+.support-message{max-width:min(82%,520px);padding:10px 13px;border-radius:14px;overflow-wrap:anywhere}
+.support-message p{margin:0 0 5px;white-space:pre-wrap}
+.support-message small{font-size:10px;opacity:.7}
+.support-message.mine{align-self:flex-start;background:#dbeafe;color:#172554;border-bottom-right-radius:4px}
+.support-message.theirs{align-self:flex-end;background:#fff;color:#111827;border-bottom-left-radius:4px}
+.support-compose{display:flex;gap:8px;margin-top:10px;align-items:flex-end}
+.support-compose textarea{flex:1;min-width:0;padding:12px;border:1px solid #d7dce5;border-radius:12px;resize:vertical}
+.dark .support-threads,.dark .support-panel,.dark .support-messages{background:#0f172a}
+.dark .support-thread,.dark .support-message.theirs{background:#1e293b;color:#fff}
+.dark .support-message.mine{background:#1d4ed8;color:#fff}
+@media(max-width:700px){.support-layout{grid-template-columns:1fr}.support-threads{display:flex;gap:8px;overflow-x:auto}.support-thread{min-width:190px;margin:0}.support-messages{height:55vh}.floating-support{right:14px;bottom:88px}}

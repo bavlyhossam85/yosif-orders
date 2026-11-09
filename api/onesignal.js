@@ -28,15 +28,77 @@ export default async function handler(req, res) {
     const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!secret) return json(res, 503, { error: 'يلزم إضافة SUPABASE_SECRET_KEY في إعدادات Vercel بعد تدوير المفتاح المكشوف.' });
     const auth = req.headers.authorization || '';
+    const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    // Scheduled cart reminders use the same encrypted REST key saved from Admin > OneSignal.
+    // CRON_SECRET only authenticates the scheduler; it is not an OneSignal credential.
+    if (process.env.CRON_SECRET && auth === 'Bearer ' + process.env.CRON_SECRET) {
+      const { data: setting, error: settingError } = await admin.from('settings')
+        .select('value').eq('key', 'onesignal_rest_api_key_encrypted').maybeSingle();
+      if (settingError) throw settingError;
+      if (!setting?.value) return json(res, 400, { error: 'احفظ OneSignal REST API Key من لوحة الأدمن أولاً.' });
+      const restKey = decryptSecret(setting.value);
+      const appId = '6b3d2509-bbcb-4b13-8647-7f4999103f59';
+      const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+      const { data: carts, error: cartsError } = await admin.from('yosif_abandoned_carts')
+        .select('user_id,cart_snapshot,last_activity_at')
+        .is('reminder_sent_at', null).is('dismissed_at', null)
+        .lt('last_activity_at', cutoff).limit(500);
+      if (cartsError) throw cartsError;
+      const eligible = [];
+      for (const cart of carts || []) {
+        if (!Array.isArray(cart.cart_snapshot) || !cart.cart_snapshot.length) {
+          await admin.from('yosif_abandoned_carts').delete().eq('user_id', cart.user_id);
+          continue;
+        }
+        const { data: recentOrders, error: orderError } = await admin.from('orders')
+          .select('id').eq('customer_id', cart.user_id).gt('created_at', cart.last_activity_at).limit(1);
+        if (orderError) throw orderError;
+        if (recentOrders?.length) {
+          await admin.from('yosif_abandoned_carts').delete().eq('user_id', cart.user_id);
+          continue;
+        }
+        eligible.push(cart.user_id);
+      }
+      if (!eligible.length) return json(res, 200, { success: true, sent: 0 });
+      const push = await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + restKey },
+        body: JSON.stringify({
+          app_id: appId, include_aliases: { external_id: eligible }, target_channel: 'push',
+          headings: { ar: 'سلتك مستنياك 🛒', en: 'Your cart is waiting 🛒' },
+          contents: { ar: 'لسه عندك منتجات في سلتك. كمّل طلبك وقت ما تحب.', en: 'You still have items in your cart. Complete your order whenever you are ready.' }
+        })
+      });
+      const result = await push.json().catch(() => ({}));
+      if (!push.ok) return json(res, 502, { error: 'فشل إرسال تذكير السلة من OneSignal.', details: result });
+      const sentAt = new Date().toISOString();
+      const { error: updateError } = await admin.from('yosif_abandoned_carts')
+        .update({ reminder_sent_at: sentAt }).in('user_id', eligible);
+      if (updateError) throw updateError;
+      const rows = eligible.map(user_id => ({
+        user_id, order_id: null, type: 'abandoned_cart',
+        title: 'سلتك مستنياك 🛒', body: 'لسه عندك منتجات في سلتك. كمّل طلبك وقت ما تحب.'
+      }));
+      const saved = await admin.from('notifications').insert(rows);
+      if (saved.error) console.warn('Could not persist cart reminder in-app notifications:', saved.error);
+      return json(res, 200, { success: true, sent: eligible.length, result });
+    }
+
     if (!auth.startsWith('Bearer ')) return json(res, 401, { error: 'Unauthorized' });
     const userClient = createClient(url, publishable, { global: { headers: { Authorization: auth } }, auth: { persistSession: false, autoRefreshToken: false } });
     const { data: authData, error: authError } = await userClient.auth.getUser();
     if (authError || !authData.user) return json(res, 401, { error: 'جلسة الدخول غير صالحة؛ سجّل الدخول مرة أخرى.' });
-    const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
-    if (profileError || profile?.role !== 'admin') return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
-    const { action, app_id, rest_api_key, event_type, order_id, title, message } = req.body || {};
-    if (app_id !== '97987044-7348-4399-bb86-eb5c8d9fa799') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
+    if (profileError) throw profileError;
+    const { action, app_id, rest_api_key, event_type, order_id, message_id, title, message } = req.body || {};
+    const isAdmin = profile?.role === 'admin';
+    // Customers may request order-created pushes for their own orders and chat pushes for messages they sent.
+    // Key management, test, broadcast, and order-updated actions remain admin-only.
+    if (!isAdmin && !(action === 'send' && ['order_created', 'chat_message'].includes(event_type))) {
+      return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
+    }
+    if (app_id !== '6b3d2509-bbcb-4b13-8647-7f4999103f59') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
 
     if (action === 'save_key') {
       const key = String(rest_api_key || '').trim();
@@ -83,6 +145,25 @@ export default async function handler(req, res) {
       recipients = [order.customer_id];
       notificationTitle = 'تحديث الطلب 🛍️';
       notificationBody = 'تم تحديث حالة طلبك #' + order.order_no;
+    } else if (event_type === 'chat_message') {
+      const { data: chatMessage, error: messageError } = await admin.from('yosif_support_messages')
+        .select('id,conversation_id,sender_id,body').eq('id', message_id).maybeSingle();
+      if (messageError) throw messageError;
+      if (!chatMessage || chatMessage.sender_id !== authData.user.id) return json(res, 403, { error: 'Forbidden' });
+      const { data: conversation, error: conversationError } = await admin.from('yosif_support_conversations')
+        .select('id,customer_id').eq('id', chatMessage.conversation_id).maybeSingle();
+      if (conversationError) throw conversationError;
+      if (!conversation) return json(res, 404, { error: 'Conversation not found' });
+      if (isAdmin) {
+        recipients = [conversation.customer_id];
+      } else {
+        if (conversation.customer_id !== authData.user.id) return json(res, 403, { error: 'Forbidden' });
+        const { data: admins, error: adminsError } = await admin.from('profiles').select('id').eq('role', 'admin');
+        if (adminsError) throw adminsError;
+        recipients = (admins || []).map(row => row.id);
+      }
+      notificationTitle = isAdmin ? 'رد جديد من الدعم 💬' : 'رسالة جديدة من عميل 💬';
+      notificationBody = String(chatMessage.body || '').trim().slice(0, 140) || 'لديك رسالة جديدة في محادثة الدعم.';
     } else if (event_type === 'broadcast') {
       if (!notificationTitle || !notificationBody) return json(res, 400, { error: 'اكتب عنوان الإشعار ونص الرسالة.' });
       const { data: customers, error } = await admin.from('profiles').select('id').neq('role', 'admin');
@@ -92,6 +173,22 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'Unsupported event type' });
     }
     if (!recipients.length) return json(res, 200, { success: true, recipients: 0 });
+
+    // Persist in-app notifications through the service-role client so the
+    // recipient sees the same event even when browser push permission is off.
+    const notificationRows = recipients.map(user_id => ({
+      user_id,
+      order_id: ['broadcast', 'chat_message'].includes(event_type) ? null : order_id,
+      type: event_type,
+      title: notificationTitle,
+      body: notificationBody
+    }));
+    for (let offset = 0; offset < notificationRows.length; offset += 500) {
+      const batch = notificationRows.slice(offset, offset + 500);
+      const saved = await admin.from('notifications').insert(batch);
+      if (saved.error) throw saved.error;
+    }
+
     const push = await fetch('https://api.onesignal.com/notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + restKey },
