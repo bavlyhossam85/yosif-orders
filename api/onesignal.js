@@ -37,8 +37,8 @@ export default async function handler(req, res) {
     if (profileError) throw profileError;
     const { action, app_id, rest_api_key, event_type, order_id, message_id, title, message } = req.body || {};
     const isAdmin = profile?.role === 'admin';
-    // Customers may request only the order-created event for an order they own.
-    // All key-management, test, broadcast, and order-updated actions remain admin-only.
+    // Customers may request order-created pushes for their own orders and chat pushes for messages they sent.
+    // Key management, test, broadcast, and order-updated actions remain admin-only.
     if (!isAdmin && !(action === 'send' && ['order_created', 'chat_message'].includes(event_type))) {
       return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
     }
@@ -122,7 +122,7 @@ export default async function handler(req, res) {
     // recipient sees the same event even when browser push permission is off.
     const notificationRows = recipients.map(user_id => ({
       user_id,
-      order_id: event_type === 'broadcast' ? null : order_id,
+      order_id: ['broadcast', 'chat_message'].includes(event_type) ? null : order_id,
       type: event_type,
       title: notificationTitle,
       body: notificationBody
