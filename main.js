@@ -25,6 +25,10 @@ let activeCategory = 'الكل'
 let productSearch = ''
 let saleCountdownTimer = null
 let selectedLocation = null
+let deliveryZoneCheck = null
+let adminDeliveryZones = []
+let deliveryZoneMap = null
+let deliveryZoneLayers = null
 let favorites = new Set(JSON.parse(localStorage.getItem('yosif_favorites') || '[]'))
 let cart = JSON.parse(localStorage.getItem('yosif_cart') || '[]')
 let walletBalance = 0
@@ -297,12 +301,15 @@ async function loadCommon() {
   activeCoupons = couponsResult.error ? [] : (couponsResult.data || []).filter(c => (!c.starts_at || new Date(c.starts_at) <= new Date()) && (!c.ends_at || new Date(c.ends_at) >= new Date()) && (c.usage_limit == null || Number(c.used_count || 0) < Number(c.usage_limit)))
 
   if (isAdmin()) {
-    const [profilesResult, walletsResult] = await Promise.all([
+    const [profilesResult, walletsResult, zonesResult] = await Promise.all([
       supabase.from('profiles').select('id,email,role').order('email', { ascending: true }),
-      supabase.from('wallets').select('user_id,balance').order('updated_at', { ascending: false })
+      supabase.from('wallets').select('user_id,balance').order('updated_at', { ascending: false }),
+      supabase.from('delivery_zones').select('*').order('created_at', { ascending: true })
     ])
     adminProfiles = profilesResult.error ? [] : (profilesResult.data || []).filter(x => x.role !== 'admin')
     adminWallets = walletsResult.error ? [] : (walletsResult.data || [])
+    adminDeliveryZones = zonesResult.error ? [] : (zonesResult.data || [])
+    if (zonesResult.error) console.warn('Delivery zones are unavailable:', zonesResult.error.message)
     const o = await supabase.from('orders').select('*').order('created_at',{ascending:false})
     if (o.error) throw o.error
     orders = (o.data || []).filter(x => x.status !== 'deleted')
@@ -592,6 +599,7 @@ function newOrderView(prefill={}) {
       <input id="oAddress" required placeholder="المنطقة، الشارع، الشقة..." style="flex:1;">
       <button type="button" id="getLocBtn" class="secondary" title="سحب موقعي تلقائياً" style="padding: 12px; border-radius: 12px; background: #e0e7ff; color: #3730a3;">📍</button>
     </div>
+    <p id="deliveryZoneCustomerStatus" class="muted" aria-live="polite">حدد موقعك للتحقق من توفر التوصيل لمنطقتك (اختياري).</p>
     <label>موعد الاستلام أو التوصيل (اختياري)</label><input id="oScheduled" type="datetime-local">
 
     <label>طلب إضافي أو طلب خارجي (اختياري)</label><input id="oTitle" value="${esc(prefill.title||'')}" placeholder="اكتب أي شيء غير موجود في المتجر">
@@ -736,10 +744,29 @@ function wireCustomerEvents() {
   document.querySelector('#getLocBtn')?.addEventListener('click', () => {
     if (!navigator.geolocation) return toast('المتصفح لا يدعم تحديد الموقع', 'error')
     toast('جاري تحديد موقعك...', 'info');
-    navigator.geolocation.getCurrentPosition(pos => {
-      selectedLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude }
-      document.querySelector('#oAddress').value += ` | 📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-      toast('تم حفظ إحداثيات موقعك مع الطلب', 'success');
+    navigator.geolocation.getCurrentPosition(async pos => {
+      selectedLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+      deliveryZoneCheck = null;
+      const address = document.querySelector('#oAddress');
+      const mapLink = `📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
+      address.value = address.value.replace(/\\s*\\|\\s*📍 https?:\\/\\/maps\\.google\\.com\\/\\?q=[^|]+/g,'').trim();
+      address.value += (address.value ? ' | ' : '') + mapLink;
+      const status = document.querySelector('#deliveryZoneCustomerStatus');
+      if (status) status.textContent = 'جاري التحقق من منطقة التوصيل...';
+      const { data, error } = await supabase.rpc('get_delivery_zone_for_point', { p_latitude: selectedLocation.latitude, p_longitude: selectedLocation.longitude });
+      if (error) {
+        if (status) status.textContent = 'تعذر التحقق من منطقة التوصيل. أعد المحاولة أو تواصل مع المتجر.';
+        toast('تم تحديد الموقع، لكن فشل التحقق من منطقة التوصيل: ' + error.message, 'error');
+        return;
+      }
+      deliveryZoneCheck = data || { inside: false };
+      if (deliveryZoneCheck.inside) {
+        if (status) status.textContent = `✅ داخل منطقة ${deliveryZoneCheck.name} · التوصيل ${money(deliveryZoneCheck.delivery_fee)} · الحد الأدنى ${money(deliveryZoneCheck.min_order)}`;
+        toast('موقعك داخل نطاق التوصيل: ' + deliveryZoneCheck.name, 'success');
+      } else {
+        if (status) status.textContent = '⚠️ الموقع خارج مناطق التوصيل المتاحة حالياً.';
+        toast('الموقع خارج مناطق التوصيل؛ لن نتمكن من قبول الطلب بهذا الموقع.', 'error');
+      }
     }, () => toast('فشل تحديد الموقع، يرجى تفعيل GPS والسماح للموقع', 'error'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   });
 
@@ -790,6 +817,7 @@ async function submitOrder(e) {
   const cartTitle = cart.map(item=>{const p=products.find(x=>x.id===item.product_id);return p?`${p.name} × ${item.quantity}`:''}).filter(Boolean).join('، ')
   const finalTitle = [cartTitle,titleInput].filter(Boolean).join(' | ')
   if (!finalTitle) return toast('أضف منتجات للسلة أو اكتب طلبك الخارجي','error')
+  if (selectedLocation && deliveryZoneCheck?.inside !== true) return toast('الموقع المحدد خارج مناطق التوصيل أو لم يكتمل التحقق منها. حدّث الموقع أو احذف إحداثياته.', 'error')
   
   const imageFiles = document.querySelector('#oImages').files;
   const btn = e.target.querySelector('button[type="submit"]')
@@ -855,6 +883,7 @@ async function submitOrder(e) {
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
   cart = []; localStorage.removeItem('yosif_cart');
   selectedLocation = null;
+  deliveryZoneCheck = null;
   window.voiceBlob = null; 
   customerView = 'orders'; await render(); 
   
@@ -1106,8 +1135,92 @@ function adminSettings() {
   <div><label>QR المحفظة</label><input id="walletQrFile" type="file" accept="image/*">${w?`<img class="setting-img" src="${esc(w)}">`:''}</div></div>
   <label>رقم WhatsApp والمحفظة</label><input id="waNumber" value="${esc(wa)}" placeholder="2010xxxxxxxx">
   <button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
-  <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="97987044-7348-4399-bb86-eb5c8d9fa799" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
+  <div class="card"><div class="section-head"><h3>🗺️ مناطق التوصيل</h3><span class="muted">ارسم أكثر من منطقة على الخريطة</span></div>
+  <p class="muted">ارسم مضلعاً يغطي حدود المنطقة، ثم احفظ الاسم ورسوم التوصيل والحد الأدنى. يمكن تعديل حدود المناطق أو حذفها من أدوات الخريطة.</p>
+  <div class="grid2"><label>اسم المنطقة<input id="deliveryZoneName" maxlength="100" placeholder="مثلاً: شبرا البلد"></label><label>رسوم التوصيل (جنيه)<input id="deliveryZoneFee" type="number" min="0" max="10000" step="0.01" value="10"></label></div>
+  <label>الحد الأدنى للطلب (جنيه)<input id="deliveryZoneMin" type="number" min="0" max="100000" step="0.01" value="0"></label>
+  <div id="deliveryZoneMap" class="delivery-zone-map" role="application" aria-label="خريطة رسم مناطق التوصيل"></div>
+  <p id="deliveryZoneStatus" class="muted" aria-live="polite">جاري تجهيز الخريطة...</p>
+  <div id="deliveryZoneList" class="delivery-zone-list"></div></div>
+    <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="97987044-7348-4399-bb86-eb5c8d9fa799" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
   <div class="card"><h3>📣 إشعار جماعي للعملاء</h3><label>عنوان الإشعار</label><input id="broadcastTitle" maxlength="80" placeholder="عرض جديد من يوسف أوردرز"><label>نص الإشعار</label><textarea id="broadcastMessage" rows="3" maxlength="240" placeholder="اكتب رسالتك للعملاء..."></textarea><button class="primary" id="sendBroadcast">إرسال Push لكل العملاء</button><p class="muted">يتم الإرسال من خادم آمن، ولا يتم كشف مفتاح OneSignal داخل المتصفح.</p></div>`
+}
+
+
+
+// Leaflet + Leaflet.draw are loaded only on the admin delivery-zone screen.
+async function loadDeliveryMapLibraries() {
+  const addCss = href => { if (!document.querySelector(`link[href="${href}"]`)) { const link=document.createElement('link'); link.rel='stylesheet'; link.href=href; document.head.appendChild(link); } };
+  const addScript = (src, test) => new Promise((resolve,reject) => {
+    if (test()) return resolve();
+    const existing=[...document.scripts].find(x=>x.src===src);
+    if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return;}
+    const script=document.createElement('script');script.src=src;script.onload=resolve;script.onerror=()=>reject(new Error('تعذر تحميل مكتبة الخريطة'));document.head.appendChild(script);
+  });
+  addCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+  addCss('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css');
+  await addScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',()=>!!window.L);
+  await addScript('https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js',()=>!!window.L?.Control?.Draw);
+}
+
+async function initDeliveryZoneEditor() {
+  const mapEl=document.querySelector('#deliveryZoneMap');
+  if(!mapEl || mapEl.dataset.ready==='true')return;
+  const statusEl=document.querySelector('#deliveryZoneStatus');
+  try {
+    await loadDeliveryMapLibraries();
+    if(!document.body.contains(mapEl))return;
+    deliveryZoneMap=window.L.map(mapEl).setView([30.12,31.24],12);
+    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(deliveryZoneMap);
+    deliveryZoneLayers=new window.L.FeatureGroup().addTo(deliveryZoneMap);
+    const drawControl=new window.L.Control.Draw({draw:{polyline:false,rectangle:false,circle:false,circlemarker:false,marker:false,polygon:{allowIntersection:false,showArea:true}},edit:{featureGroup:deliveryZoneLayers,edit:true,remove:true}});
+    deliveryZoneMap.addControl(drawControl);
+    adminDeliveryZones.forEach(zone=>{
+      const geometry=zone.polygon?.type==='Feature'?zone.polygon.geometry:zone.polygon;
+      if(!geometry || geometry.type!=='Polygon' || !Array.isArray(geometry.coordinates))return;
+      const latlngs=geometry.coordinates[0].map(pair=>[Number(pair[1]),Number(pair[0])]);
+      if(latlngs.length<4)return;
+      const layer=window.L.polygon(latlngs,{color:zone.active===false?'#9ca3af':'#0e7490'});
+      layer.feature={type:'Feature',properties:{zoneId:zone.id}};
+      layer.bindPopup(`<b>${esc(zone.name||'منطقة توصيل')}</b><br>${money(zone.delivery_fee)} · الحد الأدنى ${money(zone.min_order)}`);
+      deliveryZoneLayers.addLayer(layer);
+    });
+    deliveryZoneMap.on(window.L.Draw.Event.CREATED,async event=>{
+      const layer=event.layer;
+      const name=document.querySelector('#deliveryZoneName')?.value.trim();
+      const delivery_fee=Number(document.querySelector('#deliveryZoneFee')?.value||0);
+      const min_order=Number(document.querySelector('#deliveryZoneMin')?.value||0);
+      if(!name || !Number.isFinite(delivery_fee)||delivery_fee<0||!Number.isFinite(min_order)||min_order<0){toast('اكتب اسم المنطقة ورسوم وحد أدنى صحيحين قبل الحفظ','error');return;}
+      const polygon=layer.toGeoJSON().geometry;
+      const {data,error}=await supabase.from('delivery_zones').insert({name,delivery_fee,min_order,polygon,active:true}).select().single();
+      if(error){toast('تعذر حفظ المنطقة: '+error.message,'error');return;}
+      layer.feature={type:'Feature',properties:{zoneId:data.id}};layer.bindPopup(`<b>${esc(name)}</b><br>${money(delivery_fee)}`);deliveryZoneLayers.addLayer(layer);
+      adminDeliveryZones.push(data);renderDeliveryZoneList();toast('تم حفظ منطقة التوصيل','success');
+    });
+    deliveryZoneMap.on(window.L.Draw.Event.EDITED,async event=>{
+      const updates=[];
+      event.layers.eachLayer(layer=>{const id=layer.feature?.properties?.zoneId;if(id)updates.push(supabase.from('delivery_zones').update({polygon:layer.toGeoJSON().geometry}).eq('id',id));});
+      const results=await Promise.all(updates);const failed=results.find(x=>x.error);
+      if(failed)toast('تعذر حفظ تعديل أحد حدود المناطق: '+failed.error.message,'error');else toast('تم حفظ تعديلات حدود المناطق','success');
+    });
+    deliveryZoneMap.on(window.L.Draw.Event.DELETED,async event=>{
+      const ids=[];event.layers.eachLayer(layer=>{const id=layer.feature?.properties?.zoneId;if(id)ids.push(id);});
+      if(!ids.length)return;
+      const {error}=await supabase.from('delivery_zones').delete().in('id',ids);
+      if(error){toast('تعذر حذف المناطق: '+error.message,'error');await render();return;}
+      adminDeliveryZones=adminDeliveryZones.filter(z=>!ids.includes(z.id));renderDeliveryZoneList();toast('تم حذف المناطق المحددة','success');
+    });
+    mapEl.dataset.ready='true';
+    renderDeliveryZoneList();
+    setTimeout(()=>deliveryZoneMap?.invalidateSize(),150);
+    if(statusEl)statusEl.textContent='ارسم مضلعاً من أداة المضلع أعلى الخريطة. استخدم أدوات التعديل والحذف لحفظ التغييرات.';
+  } catch(error) { if(statusEl)statusEl.textContent='تعذر تشغيل الخريطة: '+error.message; console.error(error); }
+}
+
+function renderDeliveryZoneList() {
+  const el=document.querySelector('#deliveryZoneList');if(!el)return;
+  el.innerHTML=adminDeliveryZones.map(z=>`<div class="delivery-zone-row"><div><b>${esc(z.name||'منطقة بدون اسم')}</b><small>${money(z.delivery_fee)} توصيل · حد أدنى ${money(z.min_order)} · ${z.active?'مفعّلة':'موقوفة'}</small></div><button type="button" class="secondary small" data-zone-toggle="${z.id}">${z.active?'إيقاف':'تفعيل'}</button></div>`).join('')||'<p class="muted">لا توجد مناطق محفوظة حتى الآن.</p>';
+  el.querySelectorAll('[data-zone-toggle]').forEach(btn=>btn.onclick=async()=>{const zone=adminDeliveryZones.find(z=>z.id===btn.dataset.zoneToggle);if(!zone)return;const {error}=await supabase.from('delivery_zones').update({active:!zone.active}).eq('id',zone.id);if(error)return toast(error.message,'error');zone.active=!zone.active;toast(zone.active?'تم تفعيل المنطقة':'تم إيقاف المنطقة','success');await render();});
 }
 
 function wireAdminEvents() {
@@ -1128,6 +1241,7 @@ function wireAdminEvents() {
   document.querySelector('#sendBroadcast')?.addEventListener('click',sendBroadcast)
   document.querySelector('#saveOneSignalKey')?.addEventListener('click',saveOneSignalKey)
   document.querySelector('#testOneSignalKey')?.addEventListener('click',testOneSignalKey)
+  if (document.querySelector('#deliveryZoneMap')) initDeliveryZoneEditor()
   document.querySelectorAll('[data-receipt]').forEach(b=>b.onclick=()=>viewReceipt(b.dataset.receipt))
   document.querySelectorAll('[data-review-receipt]').forEach(b=>b.onclick=()=>reviewReceipt(b.dataset.reviewReceipt,b.dataset.reviewStatus))
   
