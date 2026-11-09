@@ -247,3 +247,141 @@ img{max-width:100%}
 }
 @media(max-width:380px){.brand{font-size:14px}.product-grid{grid-template-columns:1fr 1fr}.top-actions .iconbtn{padding:7px}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
+
+/* ===== Yosif Orders · refreshed visual system ===== */
+:root{
+  --primary:#173b66;
+  --primary-strong:#102b4c;
+  --accent:#16b8c8;
+  --accent-soft:#e2f8fa;
+  --surface-1:#f2f6fb;
+  --surface-2:#e8f0f8;
+  --ink:#18283d;
+  --muted:#718096;
+  --line:#dce6f0;
+  --card-shadow:0 12px 34px rgba(19,48,79,.075);
+}
+html{scroll-behavior:smooth}
+body{background:linear-gradient(145deg,#f7faff 0%,#eef4fa 52%,#f8fbfd 100%);color:var(--ink)}
+.topbar{
+  background:linear-gradient(110deg,#102b4c 0%,#174b73 62%,#087f91 100%);
+  box-shadow:0 8px 24px rgba(16,43,76,.18);
+  border-bottom:1px solid rgba(255,255,255,.12)
+}
+.brand{letter-spacing:.15px}
+.sidebar{
+  background:rgba(255,255,255,.88);
+  border-left:1px solid rgba(210,224,238,.9);
+  box-shadow:8px 0 28px rgba(24,55,86,.035);
+  backdrop-filter:blur(16px)
+}
+.userbox{background:linear-gradient(135deg,#e8f6fb,#f0f4ff);border:1px solid #dcecf4}
+.navbtn{color:#344b63}
+.navbtn:hover:not(.active){background:#eaf5f8;color:#0d7180}
+.navbtn.active{
+  background:linear-gradient(105deg,#173b66,#087f91);
+  color:#fff;box-shadow:0 7px 18px rgba(8,127,145,.2)
+}
+.content{max-width:1180px}
+.hero{
+  background:
+    radial-gradient(circle at 12% 15%,rgba(36,205,211,.25),transparent 32%),
+    linear-gradient(120deg,#102b4c 0%,#174b73 58%,#087f91 100%);
+  box-shadow:0 16px 38px rgba(16,43,76,.18);
+  border:1px solid rgba(255,255,255,.1);
+  position:relative;overflow:hidden
+}
+.hero:after{
+  content:"";position:absolute;width:210px;height:210px;border:1px solid rgba(255,255,255,.12);
+  border-radius:44% 56% 60% 40%;left:-62px;bottom:-115px;transform:rotate(28deg);
+  box-shadow:0 0 0 24px rgba(255,255,255,.035),0 0 0 48px rgba(255,255,255,.025)
+}
+.card,.order-card,.stats>div,.product-card,.auth-card,.modal{
+  border:1px solid rgba(218,230,241,.85);
+  box-shadow:var(--card-shadow)
+}
+.card,.order-card{border-radius:20px}
+.stats>div{border-radius:20px;background:linear-gradient(160deg,#fff,#f8fbfe)}
+.stats b{color:#173b66}
+.primary{
+  background:linear-gradient(110deg,#173b66,#087f91);
+  box-shadow:0 7px 16px rgba(8,127,145,.16)
+}
+.primary:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.secondary{background:#eaf2f8;color:#25425f}
+.danger{background:#fff0f0}
+.product-card{border-radius:20px}
+.product-card img,.product-placeholder{background:#edf6fa}
+.product-placeholder{color:#168b9a}
+.pbody{padding:16px}
+.product-tools{
+  border:1px solid rgba(218,230,241,.85);border-radius:18px;
+  padding:12px 14px;background:rgba(255,255,255,.92);
+  box-shadow:0 8px 24px rgba(19,48,79,.055)
+}
+.category-tab{background:#edf3f8;color:#38536d}
+.category-tab.active{background:linear-gradient(110deg,#173b66,#087f91);box-shadow:0 5px 14px rgba(8,127,145,.18)}
+.favorite-btn{background:#fff0f2}
+.auth-card{border-radius:28px;padding:34px;background:rgba(255,255,255,.96)}
+.auth-card .logo{color:#087f91}
+.tabs{background:#edf3f8}
+.tabs button.active{background:linear-gradient(110deg,#173b66,#087f91)}
+input,textarea,select{
+  border-color:var(--line);
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease
+}
+input:focus,textarea:focus,select:focus{
+  border-color:#16a7b6!important;box-shadow:0 0 0 4px rgba(22,184,200,.12)
+}
+.status{letter-spacing:.05px}
+.status-priced{background:#e9eafe;color:#4946a5}
+.status-preparing{background:#e3f2ff;color:#17659b}
+.status-delivered{background:#e1f7ec;color:#147348}
+.notice{background:#fff8e7;border:1px solid #f7e8bc;color:#73551b}
+.modal{border-radius:24px}
+.toast{border:1px solid rgba(255,255,255,.12);box-shadow:0 16px 38px rgba(8,26,44,.24)}
+.timeline>div{border-right-color:#bdeaf0}
+.timeline>div::before{background:#0aa1b2;box-shadow:0 0 0 4px #e2f8fa}
+.qrbox{border:1px dashed #b9d7e5;background:#f5fbfd}
+@media(min-width:761px){
+  .sidebar{position:sticky;align-self:flex-start}
+  .content{padding:28px}
+}
+@media(max-width:760px){
+  .sidebar{background:rgba(255,255,255,.96);box-shadow:0 6px 18px rgba(19,48,79,.05)}
+  .navbtn{border:1px solid #e6edf4}
+  .navbtn.active{border-color:transparent}
+  .product-tools{top:64px}
+  .hero{padding:24px 20px}
+}
+.dark{
+  --primary:#67d6df;--surface-1:#111d2c;--surface-2:#1a2b3e;
+  --ink:#e8f0f8;--muted:#9aadc1;--line:#2b4055;--card-shadow:0 12px 34px rgba(0,0,0,.2)
+}
+.dark body{background:linear-gradient(145deg,#0b1421,#101f30 55%,#0b1725);color:#e8f0f8}
+.dark .topbar{background:linear-gradient(110deg,#091827,#102f49 60%,#075765)}
+.dark .sidebar{background:rgba(15,29,45,.96);border-color:#253a50}
+.dark .userbox{background:linear-gradient(135deg,#152d40,#19273e);border-color:#29465c}
+.dark .navbtn{color:#d2e1ef}
+.dark .navbtn.active{background:linear-gradient(110deg,#14516b,#087f91);color:#fff}
+.dark .hero{background:radial-gradient(circle at 12% 15%,rgba(36,205,211,.18),transparent 32%),linear-gradient(120deg,#10243a,#123b55 60%,#075765)}
+.dark .card,.dark .order-card,.dark .stats>div,.dark .product-card,.dark .auth-card,.dark .modal{
+  background:#132338;color:#e8f0f8;border-color:#263e55
+}
+.dark .stats b{color:#8ce3e8}
+.dark .product-tools{background:rgba(15,29,45,.96);border-color:#263e55}
+.dark .category-tab{background:#20364c;color:#d4e5f3}
+.dark .category-tab.active{background:linear-gradient(110deg,#14516b,#087f91);color:#fff}
+.dark .secondary{background:#233a50;color:#e5f1fa}
+.dark .notice{background:#382f1c;border-color:#66512a;color:#f5dfaa}
+.dark .qrbox{background:#14283b;border-color:#31546a}
+.dark .tabs{background:#20364c}
+.dark .tabs button.active{background:linear-gradient(110deg,#14516b,#087f91)}
+.dark input,.dark textarea,.dark select,.dark .product-tools>input{
+  background:#0e1b2b;color:#e8f0f8;border-color:#2b4055
+}
+.dark .pay-options label{background:#20364c}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}
+}
