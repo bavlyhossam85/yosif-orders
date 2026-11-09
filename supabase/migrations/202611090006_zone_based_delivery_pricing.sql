@@ -1,6 +1,13 @@
 -- Yosif Orders: derive delivery charges from the active server-side zone.
 begin;
 
+-- Admins need full CRUD access to manage all active/inactive delivery zones.
+drop policy if exists "Admins manage delivery zones" on public.delivery_zones;
+create policy "Admins manage delivery zones"
+  on public.delivery_zones for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
 create or replace function public.enforce_order_delivery_zone()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare v_zone record;
