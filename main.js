@@ -505,6 +505,7 @@ function cartMarkup() {
   if (!cart.length) return '<div class="empty">السلة فارغة حالياً. اختار منتجات من صفحة المنتجات.</div>'
   return `<div class="cart-lines">${cart.map((item,index)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return '';const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());const price=sale?Number(p.sale_price):Number(p.unit_price);return `<div class="cart-line"><div class="row"><b>${esc(p.name)}</b><span>${money(price*item.quantity)}</span></div>${Object.keys(item.selected_options||{}).length?`<small class="muted">${esc(Object.entries(item.selected_options).map(([k,v])=>k+': '+v).join(' • '))}</small>`:''}<div class="row"><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="-1">−</button><b>${item.quantity}</b><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="1">+</button><button type="button" class="danger small" data-cart-remove="${index}">حذف</button></div><label>ملاحظة للمنتج</label><input data-cart-note="${index}" value="${esc(item.item_note||'')}" maxlength="500" placeholder="مثلاً: بدون سكر"></div>`}).join('')}</div>
   <div class="row"><b>إجمالي المنتجات المبدئي</b><b>${money(cart.reduce((sum,item)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return sum;const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());return sum+(Number(sale?p.sale_price:p.unit_price)*item.quantity)},0))}</b></div>
+  <div class="cross-sell"><b>منتجات ممكن تحتاجها كمان</b><div class="cross-sell-items">${products.filter(p=>p.active&&!cart.some(x=>x.product_id===p.id)).sort(()=>Math.random()-.5).slice(0,3).map(p=>`<button type="button" class="secondary small" data-cross-sell="${p.id}">${esc(p.name)} · ${money(p.unit_price)} +</button>`).join('')||'<small class="muted">لا توجد اقتراحات إضافية حالياً</small>'}</div></div>
   <button type="button" class="secondary small" id="shareCartWhatsApp">مشاركة السلة عبر واتساب</button>`
 }
 function shareCartWhatsApp() {
@@ -666,6 +667,7 @@ function wireCustomerEvents() {
   document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
   document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
   document.querySelector('#shareCartWhatsApp')?.addEventListener('click',shareCartWhatsApp)
+  document.querySelectorAll('[data-cross-sell]').forEach(b=>b.onclick=()=>addToCart(b.dataset.crossSell))
   document.querySelector('#orderForm')?.addEventListener('submit',submitOrder)
   document.querySelectorAll('[data-open-order]').forEach(b=>b.onclick=()=>openOrder(b.dataset.openOrder))
   document.querySelectorAll('[data-pay-order]').forEach(b=>b.onclick=()=>openPayModal(b.dataset.payOrder))
