@@ -109,7 +109,14 @@ create table if not exists public.yosif_abandoned_carts (
   constraint yosif_abandoned_cart_snapshot_array check (jsonb_typeof(cart_snapshot) = 'array')
 );
 
+grant select, insert on public.yosif_support_conversations to authenticated;
+grant select, insert on public.yosif_support_messages to authenticated;
+grant all on public.yosif_support_conversations, public.yosif_support_messages to service_role;
+
 alter table public.yosif_abandoned_carts enable row level security;
+grant select, insert, update, delete on public.yosif_abandoned_carts to authenticated;
+grant all on public.yosif_abandoned_carts to service_role;
+
 drop policy if exists "Yosif customers manage own abandoned cart" on public.yosif_abandoned_carts;
 create policy "Yosif customers manage own abandoned cart"
   on public.yosif_abandoned_carts for all to authenticated
