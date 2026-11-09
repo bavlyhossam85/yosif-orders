@@ -252,7 +252,7 @@ async function loadCommon() {
     supabase.from('notifications').select('*').eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(50)
   ])
   if (p.error) throw p.error
-  if (s.data) settings = Object.fromEntries(s.data.map(x => [x.key, x]))
+  if (s.data) settings = Object.fromEntries(s.data.filter(x => x.key !== 'onesignal_rest_api_key_encrypted').map(x => [x.key, x]))
   if (n.error) throw n.error
   products = p.data || []
   notifications = n.data || []
