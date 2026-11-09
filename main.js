@@ -1177,10 +1177,20 @@ async function initDeliveryZoneEditor() {
     deliveryZoneMap.addControl(drawControl);
     adminDeliveryZones.forEach(zone=>{
       const geometry=zone.polygon?.type==='Feature'?zone.polygon.geometry:zone.polygon;
-      if(!geometry || geometry.type!=='Polygon' || !Array.isArray(geometry.coordinates))return;
-      const latlngs=geometry.coordinates[0].map(pair=>[Number(pair[1]),Number(pair[0])]);
-      if(latlngs.length<4)return;
-      const layer=window.L.polygon(latlngs,{color:zone.active===false?'#9ca3af':'#0e7490'});
+      if(!geometry)return;
+      let layer;
+      if(geometry.type==='Polygon' && Array.isArray(geometry.coordinates)) {
+        const latlngs=geometry.coordinates[0].map(pair=>[Number(pair[1]),Number(pair[0])]);
+        if(latlngs.length<4)return;
+        layer=window.L.polygon(latlngs,{color:zone.active===false?'#9ca3af':'#0e7490'});
+      } else if(String(geometry.type||'').toLowerCase()==='circle') {
+        const center=geometry.center||{};
+        const lat=Number(Array.isArray(center)?center[0]:(center.latitude??center.lat));
+        const lng=Number(Array.isArray(center)?center[1]:(center.longitude??center.lng));
+        const radius=Number(geometry.radius_m??geometry.radius);
+        if(!Number.isFinite(lat)||!Number.isFinite(lng)||!Number.isFinite(radius)||radius<=0)return;
+        layer=window.L.circle([lat,lng],{radius,color:zone.active===false?'#9ca3af':'#0e7490'});
+      } else return;
       layer.feature={type:'Feature',properties:{zoneId:zone.id}};
       layer.bindPopup(`<b>${esc(zone.name||'منطقة توصيل')}</b><br>${money(zone.delivery_fee)} · الحد الأدنى ${money(zone.min_order)}`);
       deliveryZoneLayers.addLayer(layer);
