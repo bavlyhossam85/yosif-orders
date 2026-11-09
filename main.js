@@ -779,7 +779,7 @@ function wireCustomerEvents() {
   document.querySelectorAll('[data-open-review]').forEach(b=>b.onclick=()=>openProductReview(b.dataset.openReview))
   document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed){const p=products.find(x=>x.id===b.dataset.product);if(p&&getProductOptionGroups(p).length)openProductOptions(p);else addToCart(b.dataset.product)} })
   document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder();renderCustomer()})
-  document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
+  document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder();renderCustomer()})
   document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
   document.querySelector('#shareCartWhatsApp')?.addEventListener('click',shareCartWhatsApp)
   document.querySelectorAll('[data-cross-sell]').forEach(b=>b.onclick=()=>addToCart(b.dataset.crossSell))
@@ -1508,7 +1508,7 @@ async function showNotifications() {
 }
 
 
-async async function syncAbandonedCartReminder() {
+async function syncAbandonedCartReminder() {
   if (!session?.user?.id || isAdmin()) return
   try {
     if (cart.length) {
@@ -1525,7 +1525,7 @@ async async function syncAbandonedCartReminder() {
   } catch (error) { console.warn('Cart reminder sync:', error) }
 }
 
-function ensureSupportConversation() {
+async function ensureSupportConversation() {
   if (isAdmin()) throw new Error('الأدمن يختار محادثة عميل أولاً.')
   if (supportConversation?.id) return supportConversation
   const { data: existing, error: findError } = await supabase.from('yosif_support_conversations').select('*').eq('customer_id', session.user.id).maybeSingle()
