@@ -82,6 +82,7 @@ declare
   v_base numeric(12,2);
   v_coupon_type text;
   v_reward_type text;
+  v_wallet_credit numeric(12,2):=0;
 begin
   if not public.is_admin() then raise exception 'Admin only'; end if;
   if p_status not in ('priced','preparing','courier_near','out_for_delivery','delivered') then
@@ -138,6 +139,8 @@ begin
       v_reward_discount := round(greatest(0,v_base-v_coupon_discount) * least(greatest(v_reward.reward_value,0),100) / 100,2);
     elsif v_reward_type='fixed_discount' then
       v_reward_discount := least(greatest(v_reward.reward_value,0),greatest(0,v_base-v_coupon_discount));
+    elsif v_reward_type='wallet_credit' then
+      v_wallet_credit := greatest(v_reward.reward_value,0);
     else
       raise exception 'Selected reward type cannot be redeemed at checkout';
     end if;
@@ -152,14 +155,22 @@ begin
   end if;
   v_total := greatest(0,p_subtotal+v_shipping+p_tip-v_discount+v_fee);
 
-  if v_order.payment_method='wallet' then
+  if v_order.payment_method='wallet' or v_wallet_credit>0 then
     insert into public.wallets(user_id,balance) values(v_order.customer_id,0)
       on conflict(user_id) do nothing;
     select balance into v_wallet from public.wallets where user_id=v_order.customer_id for update;
-    if v_wallet < v_total then raise exception 'Insufficient wallet balance: required %, available %',v_total,v_wallet; end if;
-    update public.wallets set balance=v_wallet-v_total,updated_at=now() where user_id=v_order.customer_id;
-    insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
-      values(v_order.customer_id,v_total,v_wallet-v_total,auth.uid(),'order_debit','دفع الطلب من المحفظة',p_order_id);
+    if v_wallet_credit>0 then
+      update public.wallets set balance=balance+v_wallet_credit,updated_at=now() where user_id=v_order.customer_id;
+      v_wallet:=v_wallet+v_wallet_credit;
+      insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
+        values(v_order.customer_id,v_wallet_credit,v_wallet,auth.uid(),'reward_credit','إضافة مكافأة رصيد',p_order_id);
+    end if;
+    if v_order.payment_method='wallet' then
+      if v_wallet < v_total then raise exception 'Insufficient wallet balance: required %, available %',v_total,v_wallet; end if;
+      update public.wallets set balance=v_wallet-v_total,updated_at=now() where user_id=v_order.customer_id;
+      insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
+        values(v_order.customer_id,v_total,v_wallet-v_total,auth.uid(),'order_debit','دفع الطلب من المحفظة',p_order_id);
+    end if;
   end if;
 
   update public.orders set
@@ -168,9 +179,6 @@ begin
     total=v_total,status=p_status,updated_at=now()
   where id=p_order_id;
 
-  if v_order.reward_id is not null and v_order.reward_type is null then
-    null;
-  end if;
   insert into public.order_events(order_id,status,note)
     values(p_order_id,p_status,'تم التسعير وتطبيق الخصومات وحساب الإجمالي على الخادم');
 
