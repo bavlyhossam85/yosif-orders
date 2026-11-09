@@ -13,9 +13,10 @@
 - Customer payment proof upload now targets the private `payment-proofs` bucket and calls `submit_payment_receipt`; it no longer attempts a customer-side UPDATE of the sensitive `orders` row.
 - Admin receipt review controls call the `review_payment_receipt` RPC. Receipt previews use short-lived signed URLs from the private bucket.
 - Added `supabase/migrations/202611090003_wallet_wheel_hardening.sql`: server-side wallet delta adjustment and explicit set-balance RPCs (including zeroing), positive-magnitude ledger entries with direction in `transaction_type`, row locking, balance bounds, and a serialized daily wheel spin RPC that credits wallet rewards or issues expiring discount/free-delivery rewards. The user has confirmed applying this migration; live runtime behavior still needs testing.
-- Added two manual Supabase migrations:
+- Added manual Supabase migrations:
   - `supabase/migrations/202611090001_rls_and_payment_receipts.sql`
   - `supabase/migrations/202611090002_atomic_customer_orders.sql`
+  - `supabase/migrations/202611090004_transactional_checkout_promotions.sql` (prepared; not yet applied)
 - Removed the customer-side INSERT attempt into `notifications`, which is intentionally denied by the current RLS model.
 - All of the above changes are isolated on `audit/fix-security-and-push-2026-11-09`; no Production deployment or live database mutation has been performed.
 
@@ -38,10 +39,10 @@
 - Full category editing/deletion and advanced product option/flash-sale management.
 
 ## Required manual setup and verification
-1. Migration `202611090003_wallet_wheel_hardening.sql` was reported applied by the user. Confirm the earlier `202611090001` and `202611090002` migrations are also applied before relying on their RLS, receipt, and atomic-order functions.
+1. Migration `202611090003_wallet_wheel_hardening.sql` was reported applied by the user. Apply `202611090004_transactional_checkout_promotions.sql` manually in Supabase SQL Editor before enabling coupon/reward redemption or wallet checkout. Confirm migrations `202611090001` and `202611090002` are also applied before relying on their RLS, receipt, and atomic-order functions.
 2. Confirm the `payment-proofs` bucket exists and is private. The migration adds object policies but does not move existing objects or change bucket visibility.
 3. Confirm the Vercel environment has the required Supabase server secret and OneSignal encryption configuration before testing the protected API. Never add server secrets to `config.js`.
-4. Run `npm ci` and `npm run build`; then exercise wallet credit/debit/set-to-zero, wheel daily limit and reward issuance, customer ledger visibility, customer order creation, receipt upload/review, and OneSignal flows on non-production test accounts.
+4. Run `npm ci` and `npm run build`; then exercise wallet credit/debit/set-to-zero, wheel daily limit and reward issuance, coupon/reward selection, pricing with sufficient and insufficient wallet balances, cancellation refund idempotency, customer ledger visibility, customer order creation, receipt upload/review, and OneSignal flows on non-production test accounts.
 5. Do not merge or deploy until migration and runtime tests pass.
 
 ## Safety notes
@@ -54,5 +55,14 @@
 ## Latest UI integration (audit branch, not deployed)
 - Customer navigation now includes a wallet/rewards screen with current balance, recent ledger entries, unredeemed rewards, active coupon visibility, and a daily-spin action calling `spin_customer_wheel`.
 - Admin navigation now includes loyalty controls: enable/disable the wheel, set the daily limit, edit reward JSON, and adjust/replace a selected customer's wallet balance through the protected RPCs. It also lists customer wallet balances.
-- Coupon redemption and wallet checkout are intentionally not exposed as working payment flows until transactional checkout/debit/refund RPCs are implemented.
+- Customer checkout now allows selecting an active coupon and an unused reward; selections are attached through `set_order_promotions`. Admin first-pricing calls `admin_save_order_pricing`, which recalculates coupon/reward discounts and payment fees server-side and debits wallet payments transactionally. Admin cancellation calls `admin_cancel_order`, which refunds wallet debits once and restores redeemed coupon/reward usage. These RPCs are in migration `202611090004_transactional_checkout_promotions.sql`, which is prepared on the audit branch but has NOT been applied to Supabase yet.
 - No production deployment or live database changes were made by these UI commits.
+
+
+## Transactional checkout update (audit branch, not deployed)
+- Added `set_order_promotions` to validate and attach one active coupon and one unexpired unused reward to the authenticated customer's pending order.
+- Added `admin_save_order_pricing` to lock the order, validate promotion availability, calculate discounts and payment fees server-side, consume the coupon/reward, and debit wallet payments in the same transaction.
+- Added `admin_cancel_order` to lock and cancel the order, refund wallet debits once using `wallet_refunded_at`, and restore coupon usage/reward availability where applicable.
+- Updated the customer checkout UI with coupon and reward selectors, and changed admin order saving to use the protected pricing/cancellation RPCs instead of direct order-total updates.
+- Updated `spin_customer_wheel` in migration 004 so percentage rewards use the existing `customer_rewards.reward_type='percentage_discount'` CHECK value rather than the unsupported literal `discount`.
+- Migration 004 is a manual SQL step and has not been applied or runtime-tested. No production deployment or live database changes were made.
