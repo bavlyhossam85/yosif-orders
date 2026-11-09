@@ -21,6 +21,7 @@ let customerView = 'home'
 let realtimeChannels = []
 let activeCategory = 'الكل'
 let productSearch = ''
+let saleCountdownTimer = null
 let favorites = new Set(JSON.parse(localStorage.getItem('yosif_favorites') || '[]'))
 
 // Register the app shell service worker without disturbing OneSignal's worker.
@@ -448,11 +449,12 @@ function customerProducts() {
   const visible = products.filter(p => (activeCategory==='الكل' || p.category_id===activeCategory) && fuzzyMatch(`${p.name} ${p.unit||''} ${categoryName(p.category_id)}`, productSearch))
   return `<div class="section-head"><h3>المنتجات</h3><span class="muted">${visible.length} منتج</span></div>
   <div class="product-tools"><input id="productSearch" type="search" value="${esc(productSearch)}" placeholder="ابحث عن منتج... مثال: لبن، جبنه، سكر"><div class="category-tabs">${categoryTabs.map(c=>`<button class="category-tab ${activeCategory===c.id?'active':''}" data-category="${esc(c.id)}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div></div>
-  <div class="product-grid">${visible.map(p=>`<div class="product-card">
+  <div class="product-grid">${visible.map(p=>{const now=Date.now(),starts=p.sale_starts_at?new Date(p.sale_starts_at).getTime():0,ends=p.sale_ends_at?new Date(p.sale_ends_at).getTime():Infinity;const sale=!!p.is_flash_sale&&p.sale_price!==null&&p.sale_price!==undefined&&now>=starts&&now<ends;return `<div class="product-card">
     ${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="product-placeholder">🛍️</div>`}
-    <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${money(p.unit_price)} /${esc(p.unit)}</div>
+    <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${sale?`<span style="text-decoration:line-through;opacity:.65">${money(p.unit_price)}</span> <b style="color:#dc2626">${money(p.sale_price)}</b>`:`${money(p.unit_price)}`} /${esc(p.unit)}</div>
+    ${sale?`<small class="flash-countdown" data-sale-end="${esc(p.sale_ends_at||'')}">⏳ عرض لفترة محدودة</small>`:''}
     <button class="${isClosed ? 'secondary' : 'primary'} small" data-product="${p.id}" ${isClosed ? 'disabled' : ''}>${isClosed ? 'مغلق' : 'أضف للطلب'}</button></div>
-  </div>`).join('') || '<div class="empty">مفيش منتجات مطابقة للبحث.</div>'}</div>`
+  </div>`}).join('') || '<div class="empty">مفيش منتجات مطابقة للبحث.</div>'}</div>`
 }
 
 function newOrderView(prefill={}) {
@@ -552,7 +554,24 @@ function orderCard(o) {
   </article>`
 }
 
+function startSaleCountdowns() {
+  if (saleCountdownTimer) clearInterval(saleCountdownTimer)
+  const update = () => {
+    let expired = false
+    document.querySelectorAll('[data-sale-end]').forEach(el => {
+      const left = new Date(el.dataset.saleEnd).getTime() - Date.now()
+      if (!Number.isFinite(left) || left <= 0) { el.textContent = 'انتهى العرض'; expired = true; return }
+      const hours = Math.floor(left / 3600000), minutes = Math.floor((left % 3600000) / 60000), seconds = Math.floor((left % 60000) / 1000)
+      el.textContent = `⏳ متبقي ${hours}:${String(minutes).padStart(2,'0')}:${String(seconds).padStart(2,'0')}`
+    })
+    if (expired) { clearInterval(saleCountdownTimer); saleCountdownTimer = null; setTimeout(() => renderCustomer(), 250) }
+  }
+  update()
+  saleCountdownTimer = setInterval(update, 1000)
+}
+
 function wireCustomerEvents() {
+  startSaleCountdowns()
   const isClosed = getSetting('store_status', 'open') === 'closed';
   
   document.querySelectorAll('[data-nav="new"]').forEach(b=>b.onclick=()=>{
