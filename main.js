@@ -469,19 +469,41 @@ async function toggleFavorite(id) {
   localStorage.setItem('yosif_favorites', JSON.stringify([...favorites]))
   renderCustomer()
 }
-function addToCart(productId) {
+function addToCart(productId, selectedOptions = {}) {
   const p = products.find(x => x.id === productId)
   if (!p || !p.active) return toast('المنتج غير متاح حالياً', 'error')
-  const item = cart.find(x => x.product_id === productId)
+  const optionKey=JSON.stringify(selectedOptions||{})
+  const item = cart.find(x => x.product_id === productId && JSON.stringify(x.selected_options||{})===optionKey)
   if (item) item.quantity = Math.min(100, Number(item.quantity || 1) + 1)
-  else cart.push({ product_id: productId, quantity: 1, selected_options: {}, item_note: '' })
+  else cart.push({ product_id: productId, quantity: 1, selected_options: selectedOptions||{}, item_note: '' })
   localStorage.setItem('yosif_cart', JSON.stringify(cart))
   toast(`تمت إضافة ${p.name} للسلة`, 'success')
   renderCustomer()
 }
+function getProductOptionGroups(product) {
+  if(!Array.isArray(product.options))return []
+  return product.options.map((opt,index)=>{
+    if(typeof opt==='string')return {key:opt,label:opt,choices:[]}
+    if(!opt||typeof opt!=='object')return null
+    const label=opt.name||opt.label||opt.title||`اختيار ${index+1}`
+    const choices=opt.values||opt.options||opt.choices||[]
+    return {key:String(opt.id||opt.name||opt.label||index),label:String(label),choices:Array.isArray(choices)?choices:[]}
+  }).filter(Boolean)
+}
+function openProductOptions(product) {
+  const groups=getProductOptionGroups(product).filter(g=>g.choices.length)
+  if(!groups.length)return addToCart(product.id)
+  const html=`<div class="modal-backdrop" id="optionsModal"><div class="modal"><button type="button" class="close" id="closeOptions">×</button><h2>${esc(product.name)}</h2><form id="productOptionsForm">${groups.map((g,i)=>`<label>${esc(g.label)}<select data-product-option="${i}" required><option value="">اختر</option>${g.choices.map(choice=>{const value=typeof choice==='object'?(choice.value??choice.name??choice.label??''):choice;const label=typeof choice==='object'?(choice.label??choice.name??choice.value??''):choice;return `<option value="${esc(value)}">${esc(label)}</option>`}).join('')}</select></label>`).join('')}<button class="primary" type="submit">إضافة للسلة</button></form></div></div>`
+  document.body.insertAdjacentHTML('beforeend',html)
+  const close=()=>document.querySelector('#optionsModal')?.remove()
+  document.querySelector('#closeOptions').onclick=close
+  document.querySelector('#optionsModal').addEventListener('click',e=>{if(e.target.id==='optionsModal')close()})
+  document.querySelector('#productOptionsForm').onsubmit=e=>{e.preventDefault();const selected={};groups.forEach((g,i)=>{selected[g.label]=document.querySelector(`[data-product-option="${i}"]`).value});close();addToCart(product.id,selected)}
+}
+
 function cartMarkup() {
   if (!cart.length) return '<div class="empty">السلة فارغة حالياً. اختار منتجات من صفحة المنتجات.</div>'
-  return `<div class="cart-lines">${cart.map((item,index)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return '';const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());const price=sale?Number(p.sale_price):Number(p.unit_price);return `<div class="cart-line"><div class="row"><b>${esc(p.name)}</b><span>${money(price*item.quantity)}</span></div><div class="row"><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="-1">−</button><b>${item.quantity}</b><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="1">+</button><button type="button" class="danger small" data-cart-remove="${index}">حذف</button></div><label>ملاحظة للمنتج</label><input data-cart-note="${index}" value="${esc(item.item_note||'')}" maxlength="500" placeholder="مثلاً: بدون سكر"></div>`}).join('')}</div>
+  return `<div class="cart-lines">${cart.map((item,index)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return '';const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());const price=sale?Number(p.sale_price):Number(p.unit_price);return `<div class="cart-line"><div class="row"><b>${esc(p.name)}</b><span>${money(price*item.quantity)}</span></div>${Object.keys(item.selected_options||{}).length?`<small class="muted">${esc(Object.entries(item.selected_options).map(([k,v])=>k+': '+v).join(' • '))}</small>`:''}<div class="row"><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="-1">−</button><b>${item.quantity}</b><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="1">+</button><button type="button" class="danger small" data-cart-remove="${index}">حذف</button></div><label>ملاحظة للمنتج</label><input data-cart-note="${index}" value="${esc(item.item_note||'')}" maxlength="500" placeholder="مثلاً: بدون سكر"></div>`}).join('')}</div>
   <div class="row"><b>إجمالي المنتجات المبدئي</b><b>${money(cart.reduce((sum,item)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return sum;const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());return sum+(Number(sale?p.sale_price:p.unit_price)*item.quantity)},0))}</b></div>
   <button type="button" class="secondary small" id="shareCartWhatsApp">مشاركة السلة عبر واتساب</button>`
 }
@@ -639,7 +661,7 @@ function wireCustomerEvents() {
   document.querySelector('#productSearch')?.addEventListener('input', e => { productSearch=e.target.value; const pos=e.target.selectionStart; renderCustomer(); const el=document.querySelector('#productSearch'); el?.focus(); el?.setSelectionRange(pos,pos) })
   document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category; renderCustomer()})
   document.querySelectorAll('[data-favorite]').forEach(b=>b.onclick=()=>toggleFavorite(b.dataset.favorite))
-  document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed) addToCart(b.dataset.product) })
+  document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed){const p=products.find(x=>x.id===b.dataset.product);if(p&&getProductOptionGroups(p).length)openProductOptions(p);else addToCart(b.dataset.product)} })
   document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
   document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
   document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
