@@ -98,6 +98,22 @@ export default async function handler(req, res) {
       return json(res, 400, { error: 'Unsupported event type' });
     }
     if (!recipients.length) return json(res, 200, { success: true, recipients: 0 });
+
+    // Persist in-app notifications through the service-role client so the
+    // recipient sees the same event even when browser push permission is off.
+    const notificationRows = recipients.map(user_id => ({
+      user_id,
+      order_id: event_type === 'broadcast' ? null : order_id,
+      type: event_type,
+      title: notificationTitle,
+      body: notificationBody
+    }));
+    for (let offset = 0; offset < notificationRows.length; offset += 500) {
+      const batch = notificationRows.slice(offset, offset + 500);
+      const saved = await admin.from('notifications').insert(batch);
+      if (saved.error) throw saved.error;
+    }
+
     const push = await fetch('https://api.onesignal.com/notifications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + restKey },
