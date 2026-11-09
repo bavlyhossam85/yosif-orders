@@ -261,6 +261,8 @@ async function loadCommon() {
   if (n.error) throw n.error
   products = p.data || []
   notifications = n.data || []
+  const { data: savedWishlist, error: wishlistError } = await supabase.from('wishlists').select('product_id').eq('user_id', session.user.id)
+  if (!wishlistError && savedWishlist) favorites = new Set(savedWishlist.map(row => row.product_id))
   
   if (isAdmin()) {
     const o = await supabase.from('orders').select('*').order('created_at',{ascending:false})
@@ -438,8 +440,16 @@ function levenshtein(a,b) {
   for(let i=1;i<=a.length;i++) { let prev=row[0]; row[0]=i; for(let j=1;j<=b.length;j++){ const old=row[j]; row[j]=Math.min(row[j]+1,row[j-1]+1,prev+(a[i-1]===b[j-1]?0:1)); prev=old } }
   return row[b.length]
 }
-function toggleFavorite(id) {
-  favorites.has(id) ? favorites.delete(id) : favorites.add(id)
+async function toggleFavorite(id) {
+  const wasSaved = favorites.has(id)
+  const result = wasSaved
+    ? await supabase.from('wishlists').delete().eq('user_id', session.user.id).eq('product_id', id)
+    : await supabase.from('wishlists').insert({ user_id: session.user.id, product_id: id })
+  if (result.error) {
+    toast('تعذر مزامنة المفضلة. تأكد من تطبيق ترحيل صلاحيات قاعدة البيانات.', 'error')
+    return
+  }
+  wasSaved ? favorites.delete(id) : favorites.add(id)
   localStorage.setItem('yosif_favorites', JSON.stringify([...favorites]))
   renderCustomer()
 }
