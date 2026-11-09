@@ -1112,9 +1112,8 @@ async function saveOrder(id) {
   await supabase.from('orders').update({ subtotal: price, shipping_fee: shipping, tip: tip, payment_fee: fee, total: totalWithFees, status: status, updated_at: new Date().toISOString() }).eq('id',id)
   
   await supabase.from('order_events').insert({ order_id: id, status: status, note: `تحديث الحالة: ${statusLabel(status, o.payment_method)}` })
-  await supabase.from('notifications').insert({ user_id: o.customer_id, order_id: o.id, type: 'order_updated', title: 'تحديث الطلب', body: `🔔 تم تحديث حالة طلب #${o.order_no} إلى: ${statusLabel(status, o.payment_method)}` })
-  
-  // إرسال إشعار للموبايل الخاص بالعميل لما الأدمن يغير حالته
+  // The authenticated server endpoint persists the in-app notification and
+  // sends the matching OneSignal push, avoiding duplicate notification rows.
   await sendPushNotification('order_updated', o.id);
 
   toast('تم الحفظ','success'); beep();
