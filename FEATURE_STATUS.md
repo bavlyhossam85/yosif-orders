@@ -2,7 +2,10 @@
 
 ## Changes added on the audit branch (not deployed)
 - Fixed the Vercel OneSignal API authorization path so a signed-in customer can request only an `order_created` push for their own order. Key management, test, broadcast, and order-updated actions remain admin-only.
-- Customer order creation now calls the server-side `create_customer_order` RPC instead of directly inserting into `orders`. The RPC validates inputs, calculates catalog item prices on the database, writes order line items, and records the initial order event in one transaction.
+- Customer order creation now calls the server-side `create_customer_order` RPC instead of directly inserting into `orders`. The RPC validates inputs, calculates catalog and active flash-sale prices on the database, writes order line items with per-item notes, and records the initial order event in one transaction.
+- Added a local-persisted cart with quantity controls, per-item notes, WhatsApp sharing, and a floating cart shortcut. Product selections now become real `order_items` through the RPC.
+- Connected category filters and admin category creation to the actual `categories` table.
+- Added customer wishlist synchronization through the `wishlists` table and customer-side flash-sale countdowns. Sale price is rechecked by the order RPC.
 - Customer payment proof upload now targets the private `payment-proofs` bucket and calls `submit_payment_receipt`; it no longer attempts a customer-side UPDATE of the sensitive `orders` row.
 - Admin receipt review controls call the `review_payment_receipt` RPC. Receipt previews use short-lived signed URLs from the private bucket.
 - Added two manual Supabase migrations:
