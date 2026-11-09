@@ -102,17 +102,8 @@ create policy "Receipt owner or admin reads receipts"
   on public.payment_receipts for select to authenticated
   using (user_id = auth.uid() or public.is_admin());
 
+-- Receipt creation is RPC-only so customers cannot self-mark a receipt accepted.
 drop policy if exists "Customer submits own payment receipt" on public.payment_receipts;
-create policy "Customer submits own payment receipt"
-  on public.payment_receipts for insert to authenticated
-  with check (
-    user_id = auth.uid()
-    and exists (
-      select 1 from public.orders o
-      where o.id = payment_receipts.order_id
-        and o.customer_id = auth.uid()
-    )
-  );
 
 drop policy if exists "Admins review payment receipts" on public.payment_receipts;
 create policy "Admins review payment receipts"
@@ -391,5 +382,25 @@ $$;
 
 revoke all on function public.review_payment_receipt(uuid,text,text) from public, anon;
 grant execute on function public.review_payment_receipt(uuid,text,text) to authenticated;
+
+-- Mark notifications as read without granting customers broad UPDATE access.
+create or replace function public.mark_my_notifications_read()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $
+declare v_count integer;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  update public.notifications
+    set read_at = now()
+    where user_id = auth.uid() and read_at is null;
+  get diagnostics v_count = row_count;
+  return v_count;
+end;
+$;
+revoke all on function public.mark_my_notifications_read() from public, anon;
+grant execute on function public.mark_my_notifications_read() to authenticated;
 
 commit;
