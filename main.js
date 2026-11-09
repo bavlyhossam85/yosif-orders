@@ -23,6 +23,7 @@ let activeCategory = 'الكل'
 let productSearch = ''
 let saleCountdownTimer = null
 let favorites = new Set(JSON.parse(localStorage.getItem('yosif_favorites') || '[]'))
+let cart = JSON.parse(localStorage.getItem('yosif_cart') || '[]')
 
 // Register the app shell service worker without disturbing OneSignal's worker.
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(err => console.warn('PWA worker:', err)))
@@ -453,6 +454,29 @@ async function toggleFavorite(id) {
   localStorage.setItem('yosif_favorites', JSON.stringify([...favorites]))
   renderCustomer()
 }
+function addToCart(productId) {
+  const p = products.find(x => x.id === productId)
+  if (!p || !p.active) return toast('المنتج غير متاح حالياً', 'error')
+  const item = cart.find(x => x.product_id === productId)
+  if (item) item.quantity = Math.min(100, Number(item.quantity || 1) + 1)
+  else cart.push({ product_id: productId, quantity: 1, selected_options: {}, item_note: '' })
+  localStorage.setItem('yosif_cart', JSON.stringify(cart))
+  toast(`تمت إضافة ${p.name} للسلة`, 'success')
+  renderCustomer()
+}
+function cartMarkup() {
+  if (!cart.length) return '<div class="empty">السلة فارغة حالياً. اختار منتجات من صفحة المنتجات.</div>'
+  return `<div class="cart-lines">${cart.map((item,index)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return '';const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());const price=sale?Number(p.sale_price):Number(p.unit_price);return `<div class="cart-line"><div class="row"><b>${esc(p.name)}</b><span>${money(price*item.quantity)}</span></div><div class="row"><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="-1">−</button><b>${item.quantity}</b><button type="button" class="secondary small" data-cart-qty="${index}" data-delta="1">+</button><button type="button" class="danger small" data-cart-remove="${index}">حذف</button></div><label>ملاحظة للمنتج</label><input data-cart-note="${index}" value="${esc(item.item_note||'')}" maxlength="500" placeholder="مثلاً: بدون سكر"></div>`}).join('')}</div>
+  <div class="row"><b>إجمالي المنتجات المبدئي</b><b>${money(cart.reduce((sum,item)=>{const p=products.find(x=>x.id===item.product_id);if(!p)return sum;const sale=p.is_flash_sale&&p.sale_price!=null&&(!p.sale_starts_at||new Date(p.sale_starts_at)<=new Date())&&(!p.sale_ends_at||new Date(p.sale_ends_at)>new Date());return sum+(Number(sale?p.sale_price:p.unit_price)*item.quantity)},0))}</b></div>
+  <button type="button" class="secondary small" id="shareCartWhatsApp">مشاركة السلة عبر واتساب</button>`
+}
+function shareCartWhatsApp() {
+  const lines=cart.map(item=>{const p=products.find(x=>x.id===item.product_id);return p?`• ${p.name} × ${item.quantity}${item.item_note?' — '+item.item_note:''}`:''}).filter(Boolean)
+  if(!lines.length)return toast('السلة فارغة','error')
+  const text=encodeURIComponent('قائمة مشترياتي من Yosif Orders:\n'+lines.join('\n'))
+  window.open('https://wa.me/?text='+text,'_blank','noopener')
+}
+
 function customerProducts() {
   const isClosed = getSetting('store_status', 'open') === 'closed';
   const categoryTabs = [{id:'الكل',name:'الكل',icon:'🛍️'}, ...categories.filter(c=>c.active || isAdmin()).map(c=>({id:c.id,name:c.name,icon:c.icon||'📦'}))]
@@ -463,7 +487,7 @@ function customerProducts() {
     ${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="product-placeholder">🛍️</div>`}
     <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${sale?`<span style="text-decoration:line-through;opacity:.65">${money(p.unit_price)}</span> <b style="color:#dc2626">${money(p.sale_price)}</b>`:`${money(p.unit_price)}`} /${esc(p.unit)}</div>
     ${sale?`<small class="flash-countdown" data-sale-end="${esc(p.sale_ends_at||'')}">⏳ عرض لفترة محدودة</small>`:''}
-    <button class="${isClosed ? 'secondary' : 'primary'} small" data-product="${p.id}" ${isClosed ? 'disabled' : ''}>${isClosed ? 'مغلق' : 'أضف للطلب'}</button></div>
+    <button class="${isClosed ? 'secondary' : 'primary'} small" data-product="${p.id}" ${isClosed ? 'disabled' : ''}>${isClosed ? 'مغلق' : 'أضف للسلة'}</button></div>
   </div>`}).join('') || '<div class="empty">مفيش منتجات مطابقة للبحث.</div>'}</div>`
 }
 
@@ -477,6 +501,8 @@ function newOrderView(prefill={}) {
   }
 
   return `<form id="orderForm" class="card">
+    <div class="section-head"><h3>🛒 سلة المشتريات (${cart.reduce((n,x)=>n+Number(x.quantity||0),0)})</h3></div>
+    ${cartMarkup()}
     <div class="grid2">
       <div><label>اسم صاحب الطلب</label><input id="oName" required value="${esc(prefill.name||'')}"></div>
       <div><label>رقم الواتساب</label><input id="oPhone" type="tel" required placeholder="01xxxxxxxxx"></div>
@@ -488,7 +514,7 @@ function newOrderView(prefill={}) {
       <button type="button" id="getLocBtn" class="secondary" title="سحب موقعي تلقائياً" style="padding: 12px; border-radius: 12px; background: #e0e7ff; color: #3730a3;">📍</button>
     </div>
 
-    <label>اسم الطلب (أو المنتج)</label><input id="oTitle" required value="${esc(prefill.title||'')}">
+    <label>طلب إضافي أو طلب خارجي (اختياري)</label><input id="oTitle" value="${esc(prefill.title||'')}" placeholder="اكتب أي شيء غير موجود في المتجر">
     
     <label>التفاصيل أو الكميات</label>
     <textarea id="oDetails" placeholder="اكتب المنتجات والكميات والتفاصيل...">${esc(prefill.details||'')}</textarea>
@@ -591,12 +617,11 @@ function wireCustomerEvents() {
   document.querySelector('#productSearch')?.addEventListener('input', e => { productSearch=e.target.value; const pos=e.target.selectionStart; renderCustomer(); const el=document.querySelector('#productSearch'); el?.focus(); el?.setSelectionRange(pos,pos) })
   document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category; renderCustomer()})
   document.querySelectorAll('[data-favorite]').forEach(b=>b.onclick=()=>toggleFavorite(b.dataset.favorite))
-  document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{
-    if(!isClosed){
-      const p=products.find(x=>x.id===b.dataset.product)
-      customerView='new'; setTimeout(()=>{document.querySelector('#oTitle').value=p.name;document.querySelector('#oDetails').value=`${p.name} - ${p.unit}`;},0); renderCustomer()
-    }
-  })
+  document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed) addToCart(b.dataset.product) })
+  document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
+  document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
+  document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
+  document.querySelector('#shareCartWhatsApp')?.addEventListener('click',shareCartWhatsApp)
   document.querySelector('#orderForm')?.addEventListener('submit',submitOrder)
   document.querySelectorAll('[data-open-order]').forEach(b=>b.onclick=()=>openOrder(b.dataset.openOrder))
   document.querySelectorAll('[data-pay-order]').forEach(b=>b.onclick=()=>openPayModal(b.dataset.payOrder))
@@ -657,6 +682,10 @@ async function submitOrder(e) {
   const addressInput = document.querySelector('#oAddress').value.trim()
   const titleInput = document.querySelector('#oTitle').value.trim()
   const detailsInput = document.querySelector('#oDetails').value.trim()
+  const cartItems = cart.map(item=>({product_id:item.product_id,quantity:Number(item.quantity),selected_options:item.selected_options||{},item_note:item.item_note||''}))
+  const cartTitle = cart.map(item=>{const p=products.find(x=>x.id===item.product_id);return p?`${p.name} × ${item.quantity}`:''}).filter(Boolean).join('، ')
+  const finalTitle = [cartTitle,titleInput].filter(Boolean).join(' | ')
+  if (!finalTitle) return toast('أضف منتجات للسلة أو اكتب طلبك الخارجي','error')
   
   const imageFiles = document.querySelector('#oImages').files;
   const btn = e.target.querySelector('button[type="submit"]')
@@ -691,12 +720,12 @@ async function submitOrder(e) {
 
   const { data, error } = await supabase.rpc('create_customer_order', {
     p_phone: phoneInput,
-    p_custom_request: titleInput,
+    p_custom_request: finalTitle,
     p_customer_notes: finalNotes,
     p_attached_images: uploadedImages,
     p_payment_method: pay,
     p_tip: tip,
-    p_items: [],
+    p_items: cartItems,
     p_scheduled_for: null,
     p_latitude: null,
     p_longitude: null
@@ -711,6 +740,7 @@ async function submitOrder(e) {
   await sendPushNotification('order_created', data.id);
   
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
+  cart = []; localStorage.removeItem('yosif_cart');
   window.voiceBlob = null; 
   customerView = 'orders'; await render(); 
   
