@@ -45,6 +45,7 @@ let supportUnreadCount = 0
 let supportUnreadByConversation = {}
 let activeSupportConversationId = null
 let supportDragMoved = false
+let cartReminderInitialized = false
 
 // Register the app shell service worker without disturbing OneSignal's worker.
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(err => console.warn('PWA worker:', err)))
@@ -350,20 +351,7 @@ async function loadCommon() {
     }
   } else supportMessages = []
 
-  // Keep a server-side reminder record for carts that remain untouched.
-  try {
-    if (!isAdmin() && cart.length) {
-      await supabase.from('yosif_abandoned_carts').upsert({
-        user_id: session.user.id,
-        cart_snapshot: cart.map(item => ({ product_id: item.product_id, quantity: Number(item.quantity || 1) })),
-        last_activity_at: new Date().toISOString(),
-        reminder_sent_at: null,
-        dismissed_at: null
-      }, { onConflict: 'user_id' })
-    } else if (!isAdmin()) {
-      await supabase.from('yosif_abandoned_carts').delete().eq('user_id', session.user.id)
-    }
-  } catch (reminderError) { console.warn('Cart reminder sync:', reminderError) }
+  await syncAbandonedCartReminder(true)
 
   if (orders.length) {
     const itemsResult = await supabase.from('order_items').select('*').in('order_id', orders.map(o=>o.id))
@@ -443,6 +431,7 @@ async function logout() {
   window.OneSignalDeferred.push(async function(OneSignal) {
     try { await OneSignal.logout(); } catch(e){}
   });
+  cartReminderInitialized = false;
   await supabase.auth.signOut(); 
   location.reload(); 
 }
@@ -1508,8 +1497,8 @@ async function showNotifications() {
 }
 
 
-async function syncAbandonedCartReminder() {
-  if (!session?.user?.id || isAdmin()) return
+async function syncAbandonedCartReminder(force = false) {
+  if (!session?.user?.id || isAdmin() || (cartReminderInitialized && !force)) return
   try {
     if (cart.length) {
       const { error } = await supabase.from('yosif_abandoned_carts').upsert({
@@ -1522,6 +1511,7 @@ async function syncAbandonedCartReminder() {
       const { error } = await supabase.from('yosif_abandoned_carts').delete().eq('user_id', session.user.id)
       if (error) console.warn('Cart reminder clear:', error.message)
     }
+    cartReminderInitialized = true
   } catch (error) { console.warn('Cart reminder sync:', error) }
 }
 
@@ -1574,8 +1564,13 @@ async function sendSupportMessage(event) {
       .select('*').single()
     if (error) throw error
     input.value = ''
-    const push = await callOneSignalApi({ action: 'send', event_type: 'chat_message', message_id: message.id, app_id: ONESIGNAL_APP_ID })
-    if (!push?.success) toast('تم إرسال الرسالة داخل المحادثة، لكن تعذر إرسال Push.', 'info')
+    try {
+      const push = await callOneSignalApi({ action: 'send', event_type: 'chat_message', message_id: message.id, app_id: ONESIGNAL_APP_ID })
+      if (!push?.success) toast('تم إرسال الرسالة داخل المحادثة، لكن تعذر إرسال Push.', 'info')
+    } catch (pushError) {
+      console.warn('Support Push failed:', pushError)
+      toast('تم إرسال الرسالة داخل المحادثة، لكن تعذر إرسال Push.', 'info')
+    }
     await render()
   } catch (error) { toast(error.message || 'تعذر إرسال الرسالة', 'error') }
   finally { if (button) button.disabled = false }
