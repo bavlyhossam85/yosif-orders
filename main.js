@@ -192,6 +192,12 @@ async function compressImage(file, maxWidth = 1000, quality = 0.7) {
   });
 }
 
+function toLocalDateTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (!Number.isFinite(d.getTime())) return ''
+  return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16)
+}
 function fmtDate(d) { return new Date(d).toLocaleString('ar-EG', {dateStyle:'short', timeStyle:'short'}) }
 function statusLabel(s, pMethod='') {
   return ({
@@ -920,6 +926,9 @@ function adminProducts() {
         <input class="editPrice" data-id="${p.id}" type="number" step="0.01" value="${p.unit_price}">
         <input class="editUnit" data-id="${p.id}" value="${esc(p.unit)}">
       </div>
+      <label style="display:flex;align-items:center;gap:8px;"><input class="editFlash" data-id="${p.id}" type="checkbox" ${p.is_flash_sale?'checked':''} style="width:auto;"> عرض مؤقت</label>
+      <div class="grid2" style="gap:6px;"><input class="editSalePrice" data-id="${p.id}" type="number" min="0" step="0.01" value="${p.sale_price??''}" placeholder="سعر العرض"><input class="editSaleStart" data-id="${p.id}" type="datetime-local" value="${toLocalDateTime(p.sale_starts_at)}"></div>
+      <label>نهاية العرض<input class="editSaleEnd" data-id="${p.id}" type="datetime-local" value="${toLocalDateTime(p.sale_ends_at)}"></label>
       <input class="editImage" data-id="${p.id}" type="file" accept="image/*" style="font-size:11px; padding:4px; margin-top:5px;">
       <div class="actions" style="margin-top:10px; display:flex; gap:6px;">
         <button class="primary small" data-update-product="${p.id}">💾 حفظ</button>
@@ -1008,7 +1017,15 @@ async function addProduct(e) {
 
 async function updateProduct(id) {
   const name=document.querySelector(`.editName[data-id="${id}"]`).value.trim(), unit_price=Number(document.querySelector(`.editPrice[data-id="${id}"]`).value||0), unit=document.querySelector(`.editUnit[data-id="${id}"]`).value.trim(), file=document.querySelector(`.editImage[data-id="${id}"]`)?.files?.[0]
-  const updateData = { name, unit_price, unit }
+  const flash=document.querySelector(`.editFlash[data-id="${id}"]`)?.checked||false
+  const salePriceRaw=document.querySelector(`.editSalePrice[data-id="${id}"]`)?.value
+  const saleStartRaw=document.querySelector(`.editSaleStart[data-id="${id}"]`)?.value
+  const saleEndRaw=document.querySelector(`.editSaleEnd[data-id="${id}"]`)?.value
+  const sale_price=salePriceRaw===''?null:Number(salePriceRaw)
+  const sale_starts_at=saleStartRaw?new Date(saleStartRaw).toISOString():null
+  const sale_ends_at=saleEndRaw?new Date(saleEndRaw).toISOString():null
+  if(flash && (!Number.isFinite(sale_price)||sale_price<=0||sale_price>=unit_price||!sale_ends_at||(sale_starts_at&&new Date(sale_ends_at)<=new Date(sale_starts_at)))) return toast('راجع سعر وموعد بداية ونهاية العرض','error')
+  const updateData = { name, unit_price, unit, is_flash_sale:flash, sale_price, sale_starts_at, sale_ends_at }
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
