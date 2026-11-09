@@ -589,6 +589,13 @@ function customerOrders() {
   <div id="ordersList">${orders.map(orderCard).join('')||'<div class="empty">مفيش طلبات لسه.</div>'}</div>`
 }
 
+function orderFulfillmentMeta(order) {
+  const scheduled=order.scheduled_for?`<div class="muted">🕒 الموعد: ${fmtDate(order.scheduled_for)}</div>`:''
+  const hasCoords=Number.isFinite(Number(order.latitude))&&Number.isFinite(Number(order.longitude))&&order.latitude!==null&&order.longitude!==null
+  const location=hasCoords?`<a class="small secondary" href="https://maps.google.com/?q=${encodeURIComponent(order.latitude+','+order.longitude)}" target="_blank" rel="noopener">📍 عرض موقع العميل</a>`:''
+  return scheduled||location?`<div class="order-fulfillment-meta">${scheduled}${location}</div>`:''
+}
+
 function orderItemsHtml(orderId) {
   const rows=orderItems.filter(item=>item.order_id===orderId)
   if(!rows.length)return ''
@@ -621,7 +628,7 @@ function orderCard(o) {
   
   return `<article class="order-card" data-order-card="${o.order_no}">
     <div class="row"><div><b>طلب #${esc(o.order_no)}</b><div class="muted">${fmtDate(o.created_at)}</div></div><span class="status ${statusClass(o.status)}">${statusLabel(o.status, o.payment_method)}</span></div>
-    <h3>${esc(o.custom_request)}</h3>${orderItemsHtml(o.id)}<p>${renderNotes(o.customer_notes)}</p>
+    <h3>${esc(o.custom_request)}</h3>${orderFulfillmentMeta(o)}${orderItemsHtml(o.id)}<p>${renderNotes(o.customer_notes)}</p>
     ${imagesHtml}
     <div class="order-meta" style="flex-direction:column; align-items:flex-start;">
       <span>طريقة الدفع: ${paymentLabel(o.payment_method)}</span>
