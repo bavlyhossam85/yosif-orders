@@ -16,7 +16,7 @@
 - Added manual Supabase migrations:
   - `supabase/migrations/202611090001_rls_and_payment_receipts.sql`
   - `supabase/migrations/202611090002_atomic_customer_orders.sql`
-  - `supabase/migrations/202611090004_transactional_checkout_promotions.sql` (prepared; not yet applied)
+  - `supabase/migrations/202611090004_transactional_checkout_promotions.sql` (user confirmed applied)
 - Removed the customer-side INSERT attempt into `notifications`, which is intentionally denied by the current RLS model.
 - All of the above changes are isolated on `audit/fix-security-and-push-2026-11-09`; no Production deployment or live database mutation has been performed.
 
@@ -39,7 +39,7 @@
 - Full category editing/deletion and advanced product option/flash-sale management.
 
 ## Required manual setup and verification
-1. Migration `202611090003_wallet_wheel_hardening.sql` was reported applied by the user. Apply `202611090004_transactional_checkout_promotions.sql` manually in Supabase SQL Editor before enabling coupon/reward redemption or wallet checkout. Confirm migrations `202611090001` and `202611090002` are also applied before relying on their RLS, receipt, and atomic-order functions.
+1. The user reports applying migrations `202611090003_wallet_wheel_hardening.sql` and `202611090004_transactional_checkout_promotions.sql`. Confirm migrations `202611090001` and `202611090002` are also applied before relying on their RLS, receipt, and atomic-order functions. Apply migration `202611090005_delivery_zone_polygons.sql` before testing the new delivery-zone features.
 2. Confirm the `payment-proofs` bucket exists and is private. The migration adds object policies but does not move existing objects or change bucket visibility.
 3. Confirm the Vercel environment has the required Supabase server secret and OneSignal encryption configuration before testing the protected API. Never add server secrets to `config.js`.
 4. Run `npm ci` and `npm run build`; then exercise wallet credit/debit/set-to-zero, wheel daily limit and reward issuance, coupon/reward selection, pricing with sufficient and insufficient wallet balances, cancellation refund idempotency, customer ledger visibility, customer order creation, receipt upload/review, and OneSignal flows on non-production test accounts.
