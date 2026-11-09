@@ -12,6 +12,7 @@
 - Added scheduled delivery datetime and GPS coordinate persistence, plus map links in customer/admin order cards.
 - Customer payment proof upload now targets the private `payment-proofs` bucket and calls `submit_payment_receipt`; it no longer attempts a customer-side UPDATE of the sensitive `orders` row.
 - Admin receipt review controls call the `review_payment_receipt` RPC. Receipt previews use short-lived signed URLs from the private bucket.
+- Added `supabase/migrations/202611090003_wallet_wheel_hardening.sql`: server-side wallet delta adjustment and explicit set-balance RPCs (including zeroing), positive-magnitude ledger entries with direction in `transaction_type`, row locking, balance bounds, and a serialized daily wheel spin RPC that credits wallet rewards or issues expiring discount/free-delivery rewards. This migration is not applied and requires checking the live `customer_rewards.reward_type` and `wallet_transactions.transaction_type` constraints before application.
 - Added two manual Supabase migrations:
   - `supabase/migrations/202611090001_rls_and_payment_receipts.sql`
   - `supabase/migrations/202611090002_atomic_customer_orders.sql`
@@ -28,7 +29,7 @@
 ## Still incomplete or not verified
 - A real interactive cart with line items, options, per-item notes, animated add-to-cart, cross-sell, wishlist sync, reviews, and flash-sale countdown/enforcement.
 - Multi-polygon delivery-zone editor and authoritative server-side point-in-polygon checks; precise customer/admin map pin workflows.
-- Wallet customer checkout debit/refund, coupon and wheel reward issuance/redemption, daily spin enforcement, and customer-facing balance UI. Existing admin wallet adjustment RPC requires independent verification and should not be bypassed.
+- Wallet checkout debit/refund and idempotent cancellation refunds, coupon validation/redemption, reward application at checkout, and customer/admin UI wiring remain incomplete. The new wallet adjustment/set-balance and daily wheel RPCs are backend foundations only; they have not been applied or runtime-tested.
 - Full installment/tab eligibility, schedule generation, payment ledger, and settlement workflows.
 - Persistent customer/admin chat, attachment/voice messages, unread counters, and OneSignal chat notifications.
 - Server-scheduled abandoned-cart reminders.
