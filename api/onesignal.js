@@ -39,7 +39,7 @@ export default async function handler(req, res) {
     const isAdmin = profile?.role === 'admin';
     // Customers may request only the order-created event for an order they own.
     // All key-management, test, broadcast, and order-updated actions remain admin-only.
-    if (!isAdmin && !(action === 'send' && event_type === 'order_created')) {
+    if (!isAdmin && !(action === 'send' && ['order_created', 'chat_message'].includes(event_type))) {
       return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
     }
     if (app_id !== '6b3d2509-bbcb-4b13-8647-7f4999103f59') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
