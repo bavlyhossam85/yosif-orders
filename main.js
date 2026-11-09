@@ -614,7 +614,7 @@ function newOrderView(prefill={}) {
 
     <div class="grid2">
       <label>كود الخصم (اختياري)<select id="oCoupon"><option value="">بدون كوبون</option>${activeCoupons.map(c=>`<option value="${esc(c.code)}">${esc(c.title||c.code)} · ${esc(c.code)}</option>`).join('')}</select></label>
-      <label>مكافأة تستخدمها (اختياري)<select id="oReward"><option value="">بدون مكافأة</option>${customerRewards.filter(r=>!r.expires_at||new Date(r.expires_at)>new Date()).map(r=>`<option value="${r.id}">${esc(r.reward_type==='percentage_discount'?`خصم ${r.reward_value}%`:r.reward_type==='fixed_discount'?`خصم ${money(r.reward_value)}`:r.reward_type==='free_delivery'?'توصيل مجاني':r.reward_type==='wallet_credit'?`رصيد ${money(r.reward_value)}`:r.reward_type)}</option>`).join('')}</select></label>
+      <label>مكافأة تستخدمها (اختياري)<select id="oReward"><option value="">بدون مكافأة</option>${customerRewards.filter(r=>r.reward_type!=='wallet_credit'&&(!r.expires_at||new Date(r.expires_at)>new Date())).map(r=>`<option value="${r.id}">${esc(r.reward_type==='percentage_discount'?`خصم ${r.reward_value}%`:r.reward_type==='fixed_discount'?`خصم ${money(r.reward_value)}`:r.reward_type==='free_delivery'?'توصيل مجاني':r.reward_type==='wallet_credit'?`رصيد ${money(r.reward_value)}`:r.reward_type)}</option>`).join('')}</select></label>
     </div>
     
     <label>طريقة الدفع</label>
@@ -649,7 +649,7 @@ function orderItemsHtml(orderId) {
 }
 
 function orderCard(o) {
-  const needsPayment = (o.status !== 'pending_review') && (o.payment_method === 'instapay' || o.payment_method === 'wallet') && !o.payment_proof_url;
+  const needsPayment = (o.status !== 'pending_review') && o.payment_method === 'instapay' && !o.payment_proof_url;
   let priceDisplay = '';
   if (o.status === 'pending_review') {
     priceDisplay = '<div class="muted" style="font-size:0.9em; margin-top:5px;">في انتظار تحديد التكلفة والتوصيل</div>';
@@ -658,6 +658,8 @@ function orderCard(o) {
       <div style="font-size:0.9em; margin-top:8px; line-height:1.6; background:var(--surface-1); padding:8px; border-radius:6px;">
         <div>الطلبات: <b>${money(o.subtotal)}</b></div>
         <div>التوصيل: <b>${money(o.shipping_fee)}</b></div>
+        ${Number(o.discount_amount)>0 ? `<div>الخصم: <b>−${money(o.discount_amount)}</b></div>` : ''}
+        ${Number(o.wallet_used)>0 ? `<div>المدفوع من المحفظة: <b>${money(o.wallet_used)}</b></div>` : ''}
         ${o.tip > 0 ? `<div>إضافات: <b>${money(o.tip)}</b></div>` : ''}
         ${o.payment_fee > 0 ? `<div>رسوم الدفع: <b>${money(o.payment_fee)}</b></div>` : ''}
         <div style="margin-top:4px; font-size:1.1em; color:var(--primary);">الإجمالي: <b>${money(o.total)}</b></div>
@@ -670,7 +672,7 @@ function orderCard(o) {
        </div>`
     : '';
 
-  const pStatus = o.payment_method === 'cash' ? '' : (o.payment_proof_url ? 'تم الرفع ✔️' : 'في انتظار التحويل');
+  const pStatus = (o.payment_method === 'cash' || o.payment_method === 'wallet') ? '' : (o.payment_proof_url ? 'تم الرفع ✔️' : 'في انتظار التحويل');
   
   return `<article class="order-card" data-order-card="${o.order_no}">
     <div class="row"><div><b>طلب #${esc(o.order_no)}</b><div class="muted">${fmtDate(o.created_at)}</div></div><span class="status ${statusClass(o.status)}">${statusLabel(o.status, o.payment_method)}</span></div>
@@ -1041,14 +1043,16 @@ function adminOrderCard(o) {
     ${imagesHtml}
     
     <div class="grid2" style="margin-top: 10px;">
-      <label>سعر الطلبات<input type="number" class="priceEdit" data-id="${o.id}" value="${o.subtotal||0}"></label>
-      <label>رسوم التوصيل<input type="number" class="shippingEdit" data-id="${o.id}" value="${o.shipping_fee||0}"></label>
+      <label>سعر الطلبات<input type="number" class="priceEdit" data-id="${o.id}" value="${o.subtotal||0}" ${o.status==='pending_review'?'':'disabled'}></label>
+      <label>رسوم التوصيل<input type="number" class="shippingEdit" data-id="${o.id}" value="${o.shipping_fee||0}" ${o.status==='pending_review'?'':'disabled'}></label>
     </div>
     <div class="grid2" style="margin-top: 8px;">
-      <label>البقشيش<input type="number" class="tipEdit" data-id="${o.id}" value="${o.tip||0}"></label>
+      <label>البقشيش<input type="number" class="tipEdit" data-id="${o.id}" value="${o.tip||0}" ${o.status==='pending_review'?'':'disabled'}></label>
     </div>
 
     <div class="row" style="margin-top: 10px;"><span>الإجمالي: <b style="color:var(--primary);">${money(o.total)}</b></span></div>
+    ${Number(o.discount_amount)>0?`<div class="muted">الخصم المطبق: −${money(o.discount_amount)}</div>`:''}
+    ${Number(o.wallet_used)>0?`<div class="muted">تم الخصم من محفظة العميل: ${money(o.wallet_used)}</div>`:''}
     
     ${o.payment_proof_url?`<div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="secondary small" data-receipt="${o.id}">عرض إثبات التحويل المرفق</button><button class="primary small" data-review-receipt="${o.id}" data-review-status="accepted">قبول الإيصال</button><button class="danger small" data-review-receipt="${o.id}" data-review-status="rejected">رفض الإيصال</button></div>`:''}
     
