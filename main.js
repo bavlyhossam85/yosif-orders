@@ -803,7 +803,7 @@ function adminOrderCard(o) {
 
     <div class="row" style="margin-top: 10px;"><span>الإجمالي: <b style="color:var(--primary);">${money(o.total)}</b></span></div>
     
-    ${o.payment_proof_url?`<button class="secondary small" style="margin-top:10px;" data-receipt="${o.id}">عرض إثبات التحويل المرفق</button>`:''}
+    ${o.payment_proof_url?`<div class="actions" style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;"><button class="secondary small" data-receipt="${o.id}">عرض إثبات التحويل المرفق</button><button class="primary small" data-review-receipt="${o.id}" data-review-status="accepted">قبول الإيصال</button><button class="danger small" data-review-receipt="${o.id}" data-review-status="rejected">رفض الإيصال</button></div>`:''}
     
     <div class="actions" style="margin-top: 15px;">
       <select class="statusEdit" data-id="${o.id}">
@@ -867,6 +867,7 @@ function wireAdminEvents() {
   document.querySelector('#saveOneSignalKey')?.addEventListener('click',saveOneSignalKey)
   document.querySelector('#testOneSignalKey')?.addEventListener('click',testOneSignalKey)
   document.querySelectorAll('[data-receipt]').forEach(b=>b.onclick=()=>viewReceipt(b.dataset.receipt))
+  document.querySelectorAll('[data-review-receipt]').forEach(b=>b.onclick=()=>reviewReceipt(b.dataset.reviewReceipt,b.dataset.reviewStatus))
   
   document.querySelector('#quickToggleStore')?.addEventListener('click', async () => {
     const current = getSetting('store_status', 'open');
@@ -951,6 +952,25 @@ async function viewReceipt(id) {
   const {data,error}=await supabase.storage.from('payment-proofs').createSignedUrl(o.payment_proof_url,600)
   if(error) return toast(error.message,'error')
   if(data?.signedUrl) window.open(data.signedUrl,'_blank')
+}
+
+async function reviewReceipt(orderId, status) {
+  if (!isAdmin() || !['accepted','rejected'].includes(status)) return
+  const o = orders.find(x => x.id === orderId)
+  if (!o) return
+  const label = status === 'accepted' ? 'قبول' : 'رفض'
+  if (!confirm(`تأكيد ${label} إيصال الطلب #${o.order_no}؟`)) return
+  const { data: receipt, error: findError } = await supabase.from('payment_receipts')
+    .select('id').eq('order_id', orderId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (findError) return toast(findError.message, 'error')
+  if (!receipt?.id) return toast('لا يوجد سجل إيصال مرتبط بالطلب. قد يكون الإيصال مرفوعاً بالنظام القديم.', 'error')
+  const note = status === 'accepted' ? 'تم قبول إثبات الدفع من الإدارة' : 'تم رفض إثبات الدفع من الإدارة'
+  const { error } = await supabase.rpc('review_payment_receipt', {
+    p_receipt_id: receipt.id, p_status: status, p_review_note: note
+  })
+  if (error) return toast(error.message, 'error')
+  toast(`تم ${label} الإيصال`, 'success')
+  await render()
 }
 
 async function saveSettings() {
