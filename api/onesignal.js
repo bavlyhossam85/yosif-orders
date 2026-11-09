@@ -34,8 +34,14 @@ export default async function handler(req, res) {
     if (authError || !authData.user) return json(res, 401, { error: 'جلسة الدخول غير صالحة؛ سجّل الدخول مرة أخرى.' });
     const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
-    if (profileError || profile?.role !== 'admin') return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
+    if (profileError) throw profileError;
     const { action, app_id, rest_api_key, event_type, order_id, title, message } = req.body || {};
+    const isAdmin = profile?.role === 'admin';
+    // Customers may request only the order-created event for an order they own.
+    // All key-management, test, broadcast, and order-updated actions remain admin-only.
+    if (!isAdmin && !(action === 'send' && event_type === 'order_created')) {
+      return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
+    }
     if (app_id !== '97987044-7348-4399-bb86-eb5c8d9fa799') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
 
     if (action === 'save_key') {
