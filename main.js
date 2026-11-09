@@ -13,6 +13,7 @@ let products = []
 let categories = []
 let settings = {}
 let orders = []
+let orderItems = []
 let notifications = []
 let currentOrder = null
 let authMode = 'login'
@@ -274,6 +275,11 @@ async function loadCommon() {
     if (o.error) throw o.error
     orders = (o.data || []).filter(x => x.status !== 'deleted')
   }
+  if (orders.length) {
+    const itemsResult = await supabase.from('order_items').select('*').in('order_id', orders.map(o=>o.id))
+    if (itemsResult.error) console.warn('Order item details are unavailable until the order_items RLS migration is applied.', itemsResult.error)
+    orderItems = itemsResult.data || []
+  } else orderItems = []
 }
 
 async function render() {
@@ -552,6 +558,12 @@ function customerOrders() {
   <div id="ordersList">${orders.map(orderCard).join('')||'<div class="empty">مفيش طلبات لسه.</div>'}</div>`
 }
 
+function orderItemsHtml(orderId) {
+  const rows=orderItems.filter(item=>item.order_id===orderId)
+  if(!rows.length)return ''
+  return `<div class="order-line-items">${rows.map(item=>`<div class="row"><span>${esc(item.product_name)} × ${Number(item.quantity)}</span><b>${money(item.line_total)}</b></div>${item.item_note?`<small class="muted">ملاحظة: ${esc(item.item_note)}</small>`:''}`).join('')}</div>`
+}
+
 function orderCard(o) {
   const needsPayment = (o.status !== 'pending_review') && (o.payment_method === 'instapay' || o.payment_method === 'wallet') && !o.payment_proof_url;
   let priceDisplay = '';
@@ -578,7 +590,7 @@ function orderCard(o) {
   
   return `<article class="order-card" data-order-card="${o.order_no}">
     <div class="row"><div><b>طلب #${esc(o.order_no)}</b><div class="muted">${fmtDate(o.created_at)}</div></div><span class="status ${statusClass(o.status)}">${statusLabel(o.status, o.payment_method)}</span></div>
-    <h3>${esc(o.custom_request)}</h3><p>${renderNotes(o.customer_notes)}</p>
+    <h3>${esc(o.custom_request)}</h3>${orderItemsHtml(o.id)}<p>${renderNotes(o.customer_notes)}</p>
     ${imagesHtml}
     <div class="order-meta" style="flex-direction:column; align-items:flex-start;">
       <span>طريقة الدفع: ${paymentLabel(o.payment_method)}</span>
