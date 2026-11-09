@@ -2,6 +2,7 @@
 
 ## Changes added on the audit branch (not deployed)
 - Fixed the Vercel OneSignal API authorization path so a signed-in customer can request only an `order_created` push for their own order. Key management, test, broadcast, and order-updated actions remain admin-only.
+- Centralized order-created, order-updated, and broadcast in-app notification persistence in the protected Vercel API before the OneSignal send; removed the duplicate browser-side notification insert for order updates. This code path still requires staging runtime verification with real test accounts.
 - Customer order creation now calls the server-side `create_customer_order` RPC instead of directly inserting into `orders`. The RPC validates inputs, calculates catalog and active flash-sale prices on the database, writes order line items with per-item notes, validates optional schedule/GPS values, and records the initial order event in one transaction.
 - Added a local-persisted cart with quantity controls, per-item notes, product option selection, cross-sell suggestions, WhatsApp sharing, and a floating cart shortcut. Product selections now become real `order_items` through the RPC.
 - Connected category filters and admin category creation to the actual `categories` table.
