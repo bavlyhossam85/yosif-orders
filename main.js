@@ -351,7 +351,7 @@ async function loadCommon() {
     }
   } else supportMessages = []
 
-  await syncAbandonedCartReminder(true)
+  await syncAbandonedCartReminder()
 
   if (orders.length) {
     const itemsResult = await supabase.from('order_items').select('*').in('order_id', orders.map(o=>o.id))
@@ -767,9 +767,9 @@ function wireCustomerEvents() {
   document.querySelectorAll('[data-favorite]').forEach(b=>b.onclick=()=>toggleFavorite(b.dataset.favorite))
   document.querySelectorAll('[data-open-review]').forEach(b=>b.onclick=()=>openProductReview(b.dataset.openReview))
   document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed){const p=products.find(x=>x.id===b.dataset.product);if(p&&getProductOptionGroups(p).length)openProductOptions(p);else addToCart(b.dataset.product)} })
-  document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder();renderCustomer()})
-  document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder();renderCustomer()})
-  document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
+  document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder(true);renderCustomer()})
+  document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder(true);renderCustomer()})
+  document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder(true)}})
   document.querySelector('#shareCartWhatsApp')?.addEventListener('click',shareCartWhatsApp)
   document.querySelectorAll('[data-cross-sell]').forEach(b=>b.onclick=()=>addToCart(b.dataset.crossSell))
   document.querySelector('#orderForm')?.addEventListener('submit',submitOrder)
@@ -922,7 +922,7 @@ async function submitOrder(e) {
   
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
   cart = []; localStorage.removeItem('yosif_cart');
-  await syncAbandonedCartReminder();
+  await syncAbandonedCartReminder(true);
   selectedLocation = null;
   deliveryZoneCheck = null;
   window.voiceBlob = null; 
