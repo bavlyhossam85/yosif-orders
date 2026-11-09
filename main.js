@@ -27,6 +27,13 @@ let saleCountdownTimer = null
 let selectedLocation = null
 let favorites = new Set(JSON.parse(localStorage.getItem('yosif_favorites') || '[]'))
 let cart = JSON.parse(localStorage.getItem('yosif_cart') || '[]')
+let walletBalance = 0
+let walletTransactions = []
+let customerRewards = []
+let spinSettings = null
+let activeCoupons = []
+let adminProfiles = []
+let adminWallets = []
 
 // Register the app shell service worker without disturbing OneSignal's worker.
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(err => console.warn('PWA worker:', err)))
@@ -275,8 +282,27 @@ async function loadCommon() {
   notifications = n.data || []
   const { data: savedWishlist, error: wishlistError } = await supabase.from('wishlists').select('product_id').eq('user_id', session.user.id)
   if (!wishlistError && savedWishlist) favorites = new Set(savedWishlist.map(row => row.product_id))
-  
+
+  const [walletResult, ledgerResult, rewardsResult, spinResult, couponsResult] = await Promise.all([
+    supabase.from('wallets').select('balance').eq('user_id', session.user.id).maybeSingle(),
+    supabase.from('wallet_transactions').select('*').eq('user_id', session.user.id).order('created_at', { ascending: false }).limit(20),
+    supabase.from('customer_rewards').select('*').eq('user_id', session.user.id).is('used_at', null).order('created_at', { ascending: false }),
+    supabase.from('spin_settings').select('*').eq('id', 1).maybeSingle(),
+    supabase.from('coupons').select('*').eq('active', true).order('created_at', { ascending: false })
+  ])
+  walletBalance = Number(walletResult.data?.balance || 0)
+  walletTransactions = ledgerResult.error ? [] : (ledgerResult.data || [])
+  customerRewards = rewardsResult.error ? [] : (rewardsResult.data || [])
+  spinSettings = spinResult.error ? null : spinResult.data
+  activeCoupons = couponsResult.error ? [] : (couponsResult.data || []).filter(c => (!c.starts_at || new Date(c.starts_at) <= new Date()) && (!c.ends_at || new Date(c.ends_at) >= new Date()) && (c.usage_limit == null || Number(c.used_count || 0) < Number(c.usage_limit)))
+
   if (isAdmin()) {
+    const [profilesResult, walletsResult] = await Promise.all([
+      supabase.from('profiles').select('id,email,role').order('email', { ascending: true }),
+      supabase.from('wallets').select('user_id,balance').order('updated_at', { ascending: false })
+    ])
+    adminProfiles = profilesResult.error ? [] : (profilesResult.data || []).filter(x => x.role !== 'admin')
+    adminWallets = walletsResult.error ? [] : (walletsResult.data || [])
     const o = await supabase.from('orders').select('*').order('created_at',{ascending:false})
     if (o.error) throw o.error
     orders = (o.data || []).filter(x => x.status !== 'deleted')
@@ -419,11 +445,13 @@ function renderCustomer() {
   if (customerView==='products') content=customerProducts()
   if (customerView==='orders') content=customerOrders()
   if (customerView==='new') content=newOrderView()
+  if (customerView==='rewards') content=customerRewardsView()
   shell('Yosif Orders', [
     navBtn('home','🏠 الرئيسية',customerView==='home'),
     navBtn('products','🛍 المنتجات',customerView==='products'),
     navBtn('new','➕ طلب جديد',customerView==='new'),
-    navBtn('orders','📦 طلباتي',customerView==='orders')
+    navBtn('orders','📦 طلباتي',customerView==='orders'),
+    navBtn('rewards','🎁 محفظتي ومكافآتي',customerView==='rewards')
   ].join(''), content)
   wireNav()
   wireCustomerEvents()
@@ -891,14 +919,75 @@ function renderAdmin() {
   if (adminView==='orders') content=adminOrders()
   if (adminView==='settings') content=adminSettings()
   if (adminView==='reviews') content=adminReviews()
+  if (adminView==='loyalty') content=adminLoyalty()
   shell('لوحة الأدمن', [
     navBtn('dashboard','📊 الرئيسية',adminView==='dashboard'),
     navBtn('orders','📦 الطلبات',adminView==='orders'),
     navBtn('products','🛍️ المنتجات',adminView==='products'),
     navBtn('reviews','⭐ التقييمات',adminView==='reviews'),
+    navBtn('loyalty','🎁 المحفظة والمكافآت',adminView==='loyalty'),
     navBtn('settings','⚙️ الإعدادات',adminView==='settings')
   ].join(''), content)
   wireNav(); wireAdminEvents()
+}
+
+function customerRewardsView() {
+  const rewardLabel = r => r.reward_type === 'discount' ? `خصم ${Number(r.reward_value)}%` : r.reward_type === 'free_delivery' ? 'توصيل مجاني' : `${money(r.reward_value)} رصيد`;
+  const transactions = walletTransactions.map(t => `<div class="wallet-ledger-row"><div><b>${esc(t.description || t.transaction_type || 'حركة رصيد')}</b><small>${fmtDate(t.created_at)}</small></div><strong>${['admin_debit','order_debit'].includes(t.transaction_type) ? '−' : '+'}${money(t.amount)}</strong></div>`).join('') || '<div class="empty">لا توجد حركات على المحفظة حتى الآن.</div>';
+  const rewards = customerRewards.map(r => `<div class="reward-row"><b>${esc(rewardLabel(r))}</b><small>صالحة حتى ${r.expires_at ? fmtDate(r.expires_at) : 'بدون تاريخ انتهاء'}</small></div>`).join('') || '<div class="empty">لا توجد مكافآت متاحة حالياً.</div>';
+  const coupons = activeCoupons.map(c => `<div class="reward-row"><div><b>${esc(c.title || c.code)}</b><small>${esc(c.code)} · ${c.discount_type === 'percentage' || c.discount_type === 'percent' ? `${c.discount_value}%` : money(c.discount_value)}</small></div></div>`).join('') || '<div class="empty">لا توجد كوبونات متاحة حالياً.</div>';
+  const wheelEnabled = spinSettings?.enabled === true;
+  return `<div class="wallet-summary card"><div><span class="muted">رصيد محفظتك</span><strong>${money(walletBalance)}</strong></div><span class="wallet-icon">💳</span></div>
+    <div class="card"><div class="section-head"><h3>🎡 عجلة الحظ</h3><span class="muted">${wheelEnabled ? `حتى ${Number(spinSettings.daily_limit || 1)} محاولة يومياً` : 'غير متاحة حالياً'}</span></div><p class="muted">لف العجلة لتحصل على مكافأة من المتجر. سيتم تسجيل النتيجة على حسابك مباشرة.</p><button class="primary" id="spinNow" ${wheelEnabled ? '' : 'disabled'}>🎡 جرّب حظك</button></div>
+    <div class="card"><h3>🎁 مكافآتي</h3>${rewards}</div>
+    <div class="card"><h3>🏷️ الكوبونات المتاحة</h3>${coupons}<p class="muted">عرض الكوبونات فقط حالياً؛ تطبيق الخصم عند الدفع يحتاج ربط خطوة checkout الآمنة.</p></div>
+    <div class="card"><h3>📒 سجل المحفظة</h3>${transactions}</div>`;
+}
+
+async function spinTheWheel() {
+  const btn = document.querySelector('#spinNow');
+  if (!btn || btn.disabled) return;
+  btn.disabled = true; btn.textContent = '🎡 العجلة بتلف...';
+  const { data, error } = await supabase.rpc('spin_customer_wheel');
+  if (error) { toast(error.message, 'error'); btn.disabled = false; btn.textContent = '🎡 جرّب حظك'; return; }
+  const r = data?.reward || {};
+  const label = r.label || (r.type === 'wallet' ? `${money(r.value)} رصيد` : r.type === 'discount' ? `خصم ${r.value}%` : r.type === 'free_delivery' ? 'توصيل مجاني' : 'مكافأة');
+  toast(`مبروك! كسبت: ${label} 🎉`, 'success');
+  await render();
+}
+
+function adminLoyalty() {
+  const customers = adminProfiles.map(p => `<option value="${p.id}">${esc(p.email || p.id)} · ${p.id.slice(0,8)}</option>`).join('');
+  const balances = adminProfiles.map(p => { const w=adminWallets.find(x=>x.user_id===p.id); return `<div class="wallet-ledger-row"><div><b>${esc(p.email || p.id)}</b><small>${p.id}</small></div><strong>${money(w?.balance || 0)}</strong></div>`; }).join('') || '<div class="empty">لا يوجد عملاء ظاهرون.</div>';
+  return `<div class="card"><h3>🎡 إعدادات عجلة الحظ</h3><div class="grid2"><label class="inline-check"><input id="spinEnabled" type="checkbox" ${spinSettings?.enabled ? 'checked' : ''}> تفعيل العجلة</label><label>عدد المحاولات اليومية<input id="spinDailyLimit" type="number" min="1" max="50" value="${Number(spinSettings?.daily_limit || 1)}"></label></div><label>المكافآت (JSON)</label><textarea id="spinRewardsJson" rows="8">${esc(JSON.stringify(spinSettings?.rewards || [{type:'wallet',value:10,label:'10 جنيه رصيد'},{type:'discount',value:10,label:'خصم 10%',expires_in_days:7},{type:'free_delivery',value:0,label:'توصيل مجاني',expires_in_days:7}],null,2))}</textarea><p class="muted">الأنواع المدعومة: wallet / discount / free_delivery. اكتب قيمة موجبة للمحفظة ونسبة من 1 إلى 100 للخصم.</p><button class="primary" id="saveSpinSettings">حفظ إعدادات العجلة</button></div>
+    <div class="card"><h3>💳 تعديل رصيد عميل</h3><form id="walletAdminForm"><label>العميل<select id="walletCustomer" required><option value="">اختر العميل</option>${customers}</select></label><div class="grid2"><label>نوع العملية<select id="walletAction"><option value="credit">إضافة رصيد</option><option value="debit">خصم رصيد</option><option value="set">تعيين الرصيد مباشرة</option></select></label><label>المبلغ بالجنيه<input id="walletAmount" type="number" min="0" max="1000000" step="0.01" required></label></div><label>السبب<input id="walletDescription" maxlength="500" value="تعديل رصيد من الإدارة"></label><button class="primary" type="submit">تنفيذ العملية</button></form></div>
+    <div class="card"><h3>👥 أرصدة العملاء</h3>${balances}</div>`;
+}
+
+async function saveSpinSettings() {
+  let rewards;
+  try { rewards = JSON.parse(document.querySelector('#spinRewardsJson').value); if (!Array.isArray(rewards) || !rewards.length) throw new Error('أدخل مصفوفة مكافآت غير فارغة'); }
+  catch (e) { return toast('JSON غير صحيح: ' + e.message, 'error'); }
+  const enabled = document.querySelector('#spinEnabled').checked;
+  const daily_limit = Number(document.querySelector('#spinDailyLimit').value);
+  if (!Number.isInteger(daily_limit) || daily_limit < 1 || daily_limit > 50) return toast('عدد المحاولات يجب أن يكون من 1 إلى 50', 'error');
+  const { error } = await supabase.from('spin_settings').upsert({ id: 1, enabled, daily_limit, rewards, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+  if (error) return toast(error.message, 'error');
+  toast('تم حفظ إعدادات العجلة', 'success'); await render();
+}
+
+async function adjustCustomerWallet(e) {
+  e.preventDefault();
+  const userId = document.querySelector('#walletCustomer').value;
+  const amount = Number(document.querySelector('#walletAmount').value);
+  const action = document.querySelector('#walletAction').value;
+  const description = document.querySelector('#walletDescription').value.trim() || 'تعديل رصيد من الإدارة';
+  if (!userId || !Number.isFinite(amount) || amount < 0 || amount > 1000000) return toast('راجع العميل والمبلغ', 'error');
+  const rpc = action === 'set' ? 'set_customer_wallet_balance' : 'adjust_customer_wallet';
+  const params = action === 'set' ? { p_user_id: userId, p_new_balance: amount, p_description: description } : { p_user_id: userId, p_amount: action === 'debit' ? -amount : amount, p_description: description };
+  const { error } = await supabase.rpc(rpc, params);
+  if (error) return toast(error.message, 'error');
+  toast('تم تحديث رصيد العميل وتسجيل العملية', 'success'); await render();
 }
 
 function adminReviews() {
@@ -1006,6 +1095,9 @@ function adminSettings() {
 function wireAdminEvents() {
   document.querySelectorAll('[data-review-visibility]').forEach(b=>b.onclick=async()=>{const next=b.dataset.visible!=='true';const {error}=await supabase.from('product_reviews').update({is_visible:next}).eq('id',b.dataset.reviewVisibility);if(error)return toast(error.message,'error');toast(next?'تم نشر التقييم':'تم إخفاء التقييم','success');await render()})
     document.querySelector('#productForm')?.addEventListener('submit',addProduct)
+  document.querySelector('#saveSpinSettings')?.addEventListener('click', saveSpinSettings)
+  document.querySelector('#walletAdminForm')?.addEventListener('submit', adjustCustomerWallet)
+  document.querySelector('#spinNow')?.addEventListener('click', spinTheWheel)
   document.querySelector('#categoryForm')?.addEventListener('submit',addCategory)
   document.querySelectorAll('[data-update-product]').forEach(b=>b.onclick=()=>updateProduct(b.dataset.updateProduct))
   document.querySelectorAll('[data-toggle-product]').forEach(b=>b.onclick=()=>toggleProduct(b.dataset.toggleProduct))
