@@ -1,0 +1,22 @@
+name: Yosif Orders CI
+
+on:
+  push:
+    branches:
+      - main
+      - audit/fix-security-and-push-2026-11-09
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
