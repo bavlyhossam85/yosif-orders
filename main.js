@@ -36,20 +36,22 @@ window.addEventListener('beforeinstallprompt', (e) => {
 let mediaRec, audioChunks = [];
 window.voiceBlob = null;
 
-// Push notifications are sent server-side by the Supabase Edge Function.
-// Never place the OneSignal REST API key in browser code.
+// Push notifications are sent through the protected Vercel API.
+// The OneSignal REST API key is never returned to or stored in browser code.
+const ONESIGNAL_APP_ID = '97987044-7348-4399-bb86-eb5c8d9fa799';
+async function callOneSignalApi(payload) {
+  const { data: authData, error: authError } = await supabase.auth.getSession();
+  if (authError) throw authError;
+  const accessToken = authData.session?.access_token;
+  if (!accessToken) throw new Error('انتهت جلسة الدخول؛ سجّل الدخول مرة أخرى.');
+  const response = await fetch('/api/onesignal', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken }, body: JSON.stringify({ ...payload, app_id: ONESIGNAL_APP_ID }) });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || 'فشل تنفيذ طلب OneSignal');
+  return result;
+}
 async function sendPushNotification(eventType, orderId, title='', message='') {
-  try {
-    const { data, error } = await supabase.functions.invoke('send-onesignal-push', {
-      body: { event_type: eventType, order_id: orderId, title, message }
-    })
-    if (error) throw error
-    return data
-  } catch (error) {
-    console.error('OneSignal push failed:', error)
-    toast('تعذر إرسال إشعار Push حالياً؛ تم حفظ الطلب/التحديث.', 'error')
-    return null
-  }
+  try { return await callOneSignalApi({ action: 'send', event_type: eventType, order_id: orderId, title, message }); }
+  catch (error) { console.error('OneSignal push failed:', error); toast(error.message || 'تعذر إرسال إشعار Push حالياً؛ تم حفظ الطلب/التحديث.', 'error'); return null; }
 }
 
 function renderNotes(notes) {
@@ -837,6 +839,7 @@ function adminSettings() {
   <div><label>QR المحفظة</label><input id="walletQrFile" type="file" accept="image/*">${w?`<img class="setting-img" src="${esc(w)}">`:''}</div></div>
   <label>رقم WhatsApp والمحفظة</label><input id="waNumber" value="${esc(wa)}" placeholder="2010xxxxxxxx">
   <button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
+  <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="97987044-7348-4399-bb86-eb5c8d9fa799" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
   <div class="card"><h3>📣 إشعار جماعي للعملاء</h3><label>عنوان الإشعار</label><input id="broadcastTitle" maxlength="80" placeholder="عرض جديد من يوسف أوردرز"><label>نص الإشعار</label><textarea id="broadcastMessage" rows="3" maxlength="240" placeholder="اكتب رسالتك للعملاء..."></textarea><button class="primary" id="sendBroadcast">إرسال Push لكل العملاء</button><p class="muted">يتم الإرسال من خادم آمن، ولا يتم كشف مفتاح OneSignal داخل المتصفح.</p></div>`
 }
 
@@ -851,6 +854,8 @@ function wireAdminEvents() {
   document.querySelector('#statusFilter')?.addEventListener('change',filterAdminOrders)
   document.querySelector('#saveSettings')?.addEventListener('click',saveSettings)
   document.querySelector('#sendBroadcast')?.addEventListener('click',sendBroadcast)
+  document.querySelector('#saveOneSignalKey')?.addEventListener('click',saveOneSignalKey)
+  document.querySelector('#testOneSignalKey')?.addEventListener('click',testOneSignalKey)
   document.querySelectorAll('[data-receipt]').forEach(b=>b.onclick=()=>viewReceipt(b.dataset.receipt))
   
   document.querySelector('#quickToggleStore')?.addEventListener('click', async () => {
@@ -955,6 +960,25 @@ async function saveSettings() {
   } catch(e){toast(e.message,'error')}
 }
 
+async function saveOneSignalKey() {
+  const input = document.querySelector('#oneSignalRestKey');
+  const status = document.querySelector('#oneSignalKeyStatus');
+  const key = input?.value.trim();
+  if (!key) return toast('الصق REST API Key الجديد أولاً', 'error');
+  const button = document.querySelector('#saveOneSignalKey');
+  button.disabled = true; button.textContent = 'جاري الحفظ...';
+  try { await callOneSignalApi({ action: 'save_key', rest_api_key: key }); input.value = ''; status.textContent = 'تم حفظ المفتاح بأمان. لن يظهر المفتاح المحفوظ في الموقع.'; toast('تم حفظ مفتاح OneSignal بأمان', 'success'); }
+  catch (e) { status.textContent = e.message; toast(e.message, 'error'); }
+  finally { button.disabled = false; button.textContent = 'حفظ المفتاح'; }
+}
+async function testOneSignalKey() {
+  const status = document.querySelector('#oneSignalKeyStatus');
+  const button = document.querySelector('#testOneSignalKey');
+  button.disabled = true; button.textContent = 'جاري الاختبار...';
+  try { await callOneSignalApi({ action: 'test' }); status.textContent = 'الاتصال ناجح — مفتاح OneSignal صالح.'; toast('اتصال OneSignal ناجح', 'success'); }
+  catch (e) { status.textContent = e.message; toast(e.message, 'error'); }
+  finally { button.disabled = false; button.textContent = 'اختبار الاتصال'; }
+}
 async function sendBroadcast() {
   const title = document.querySelector('#broadcastTitle')?.value.trim()
   const message = document.querySelector('#broadcastMessage')?.value.trim()
