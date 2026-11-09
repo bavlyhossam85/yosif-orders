@@ -42,8 +42,12 @@ export default async function handler(req, res) {
       const key = String(rest_api_key || '').trim();
       if (key.length < 20 || key.length > 500) return json(res, 400, { error: 'REST API Key غير صالح؛ راجع القيمة.' });
       const encrypted = encryptSecret(key);
-      const { error } = await admin.from('settings').upsert({ key: 'onesignal_rest_api_key_encrypted', value: encrypted }, { onConflict: 'key' });
-      if (error) throw error;
+      const existing = await admin.from('settings').select('key').eq('key', 'onesignal_rest_api_key_encrypted').maybeSingle();
+      if (existing.error) throw existing.error;
+      const write = existing.data
+        ? await admin.from('settings').update({ value: encrypted }).eq('key', 'onesignal_rest_api_key_encrypted')
+        : await admin.from('settings').insert({ key: 'onesignal_rest_api_key_encrypted', value: encrypted });
+      if (write.error) throw write.error;
       return json(res, 200, { success: true });
     }
 
