@@ -73,12 +73,12 @@
 Implemented on the audit branch:
 - Private customer/admin support conversations and messages, unread counters, read receipts, Realtime subscriptions, and draggable customer support shortcut.
 - Protected OneSignal API support-message routing, plus aligned Web SDK/client/server App ID to the previously confirmed app `6b3d2509-bbcb-4b13-8647-7f4999103f59`.
-- Server-side abandoned-cart activity queue and Supabase Edge Function that sends a single reminder after 45 minutes idle and suppresses it if a newer order exists.
-- Added migration `202611090008_support_and_cart_reminders.sql` and Supabase function config.
+- Server-side abandoned-cart activity queue; the existing Vercel `/api/onesignal` endpoint sends one reminder after 45 minutes idle, decrypting the OneSignal REST API Key saved from Admin → Settings → OneSignal. No Supabase Edge Function is used for Push.
+- Added migration `202611090008_support_and_cart_reminders.sql`; removed the Push Edge Function implementations and their Supabase function configuration.
 
 Still requires external setup/runtime verification:
 - Apply migration 008 in Supabase.
-- Deploy the Edge Function, configure its secrets, enable pg_cron/pg_net, and schedule the 15-minute worker.
+- Configure `CRON_SECRET` for the existing Vercel API endpoint, enable pg_cron/pg_net, and schedule the 15-minute worker. The OneSignal REST API Key remains stored only through the admin panel.
 - Configure the server-only Vercel Supabase secret and re-save the OneSignal REST API key for the confirmed App ID in the admin settings.
 - Test chat privacy, unread/read behavior, chat/order/broadcast Push, and abandoned-cart timing on real test accounts/devices.
 
