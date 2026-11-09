@@ -11,6 +11,7 @@ let session = null
 let profile = null
 let products = []
 let categories = []
+let productReviews = []
 let settings = {}
 let orders = []
 let orderItems = []
@@ -257,15 +258,17 @@ async function loadCommon() {
   let pQuery = supabase.from('products').select('*').order('created_at', {ascending:false});
   if (!isAdmin()) pQuery = pQuery.eq('active', true);
 
-  const [p, c, s, n] = await Promise.all([
+  const [p, c, s, n, r] = await Promise.all([
     pQuery,
     supabase.from('categories').select('*').order('sort_order', { ascending: true }),
     supabase.from('settings').select('*'),
-    supabase.from('notifications').select('*').eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(50)
+    supabase.from('notifications').select('*').eq('user_id', session.user.id).order('created_at', {ascending:false}).limit(50),
+    supabase.from('product_reviews').select('*').order('created_at',{ascending:false}).limit(300)
   ])
   if (p.error) throw p.error
   if (c.error) throw c.error
   categories = c.data || []
+  productReviews = r.error ? [] : (r.data || [])
   if (s.data) settings = Object.fromEntries(s.data.filter(x => x.key !== 'onesignal_rest_api_key_encrypted').map(x => [x.key, x]))
   if (n.error) throw n.error
   products = p.data || []
@@ -480,6 +483,16 @@ function addToCart(productId, selectedOptions = {}) {
   toast(`تمت إضافة ${p.name} للسلة`, 'success')
   renderCustomer()
 }
+async function openProductReview(productId) {
+  const product=products.find(p=>p.id===productId);if(!product)return
+  const html=`<div class="modal-backdrop" id="reviewModal"><div class="modal"><button type="button" class="close" id="closeReview">×</button><h2>تقييم ${esc(product.name)}</h2><form id="reviewForm"><label>التقييم</label><select id="reviewRating" required><option value="">اختر عدد النجوم</option><option value="5">★★★★★ ممتاز</option><option value="4">★★★★ جيد جداً</option><option value="3">★★★ جيد</option><option value="2">★★ مقبول</option><option value="1">★ ضعيف</option></select><label>تعليقك (اختياري)</label><textarea id="reviewComment" maxlength="1000" rows="3"></textarea><button class="primary" type="submit">إرسال التقييم للمراجعة</button></form></div></div>`
+  document.body.insertAdjacentHTML('beforeend',html)
+  const close=()=>document.querySelector('#reviewModal')?.remove()
+  document.querySelector('#closeReview').onclick=close
+  document.querySelector('#reviewModal').addEventListener('click',e=>{if(e.target.id==='reviewModal')close()})
+  document.querySelector('#reviewForm').onsubmit=async e=>{e.preventDefault();const rating=Number(document.querySelector('#reviewRating').value);const comment=document.querySelector('#reviewComment').value.trim();const {data,error}=await supabase.from('product_reviews').insert({product_id:productId,user_id:session.user.id,rating,comment,is_visible:false}).select().single();if(error)return toast(error.message,'error');productReviews.unshift(data);toast('تم إرسال تقييمك للمراجعة','success');close();renderCustomer()}
+}
+
 function getProductOptionGroups(product) {
   if(!Array.isArray(product.options))return []
   return product.options.map((opt,index)=>{
@@ -523,7 +536,7 @@ function customerProducts() {
   <div class="product-tools"><input id="productSearch" type="search" value="${esc(productSearch)}" placeholder="ابحث عن منتج... مثال: لبن، جبنه، سكر"><div class="category-tabs">${categoryTabs.map(c=>`<button class="category-tab ${activeCategory===c.id?'active':''}" data-category="${esc(c.id)}">${esc(c.icon)} ${esc(c.name)}</button>`).join('')}</div></div>
   <div class="product-grid">${visible.map(p=>{const now=Date.now(),starts=p.sale_starts_at?new Date(p.sale_starts_at).getTime():0,ends=p.sale_ends_at?new Date(p.sale_ends_at).getTime():Infinity;const sale=!!p.is_flash_sale&&p.sale_price!==null&&p.sale_price!==undefined&&now>=starts&&now<ends;return `<div class="product-card">
     ${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:`<div class="product-placeholder">🛍️</div>`}
-    <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${sale?`<span style="text-decoration:line-through;opacity:.65">${money(p.unit_price)}</span> <b style="color:#dc2626">${money(p.sale_price)}</b>`:`${money(p.unit_price)}`} /${esc(p.unit)}</div>
+    <div class="pbody"><button class="favorite-btn ${favorites.has(p.id)?'is-favorite':''}" data-favorite="${p.id}" aria-label="إضافة للمفضلة">${favorites.has(p.id)?'♥':'♡'}</button><h3>${esc(p.name)}</h3><div class="muted">${sale?`<span style="text-decoration:line-through;opacity:.65">${money(p.unit_price)}</span> <b style="color:#dc2626">${money(p.sale_price)}</b>`:`${money(p.unit_price)}`} /${esc(p.unit)}</div><div class="muted">${(()=>{const rs=productReviews.filter(r=>r.product_id===p.id&&r.is_visible);return rs.length?`⭐ ${(rs.reduce((a,r)=>a+Number(r.rating),0)/rs.length).toFixed(1)} (${rs.length})`:'لا توجد تقييمات بعد'})()}</div><button type="button" class="linkbtn small" data-open-review="${p.id}">قيّم المنتج</button>
     ${sale?`<small class="flash-countdown" data-sale-end="${esc(p.sale_ends_at||'')}">⏳ عرض لفترة محدودة</small>`:''}
     <button class="${isClosed ? 'secondary' : 'primary'} small" data-product="${p.id}" ${isClosed ? 'disabled' : ''}>${isClosed ? 'مغلق' : 'أضف للسلة'}</button></div>
   </div>`}).join('') || '<div class="empty">مفيش منتجات مطابقة للبحث.</div>'}</div>`
@@ -669,6 +682,7 @@ function wireCustomerEvents() {
   document.querySelector('#productSearch')?.addEventListener('input', e => { productSearch=e.target.value; const pos=e.target.selectionStart; renderCustomer(); const el=document.querySelector('#productSearch'); el?.focus(); el?.setSelectionRange(pos,pos) })
   document.querySelectorAll('[data-category]').forEach(b=>b.onclick=()=>{activeCategory=b.dataset.category; renderCustomer()})
   document.querySelectorAll('[data-favorite]').forEach(b=>b.onclick=()=>toggleFavorite(b.dataset.favorite))
+  document.querySelectorAll('[data-open-review]').forEach(b=>b.onclick=()=>openProductReview(b.dataset.openReview))
   document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed){const p=products.find(x=>x.id===b.dataset.product);if(p&&getProductOptionGroups(p).length)openProductOptions(p);else addToCart(b.dataset.product)} })
   document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
   document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
@@ -876,13 +890,19 @@ function renderAdmin() {
   if (adminView==='products') content=adminProducts()
   if (adminView==='orders') content=adminOrders()
   if (adminView==='settings') content=adminSettings()
+  if (adminView==='reviews') content=adminReviews()
   shell('لوحة الأدمن', [
     navBtn('dashboard','📊 الرئيسية',adminView==='dashboard'),
     navBtn('orders','📦 الطلبات',adminView==='orders'),
     navBtn('products','🛍️ المنتجات',adminView==='products'),
+    navBtn('reviews','⭐ التقييمات',adminView==='reviews'),
     navBtn('settings','⚙️ الإعدادات',adminView==='settings')
   ].join(''), content)
   wireNav(); wireAdminEvents()
+}
+
+function adminReviews() {
+  return `<div class="card"><h3>مراجعة تقييمات المنتجات</h3>${productReviews.map(r=>{const p=products.find(x=>x.id===r.product_id);return `<div class="review-row"><div><b>${esc(p?.name||'منتج محذوف')}</b><div> ${'★'.repeat(Number(r.rating))}${'☆'.repeat(5-Number(r.rating))}</div><p>${esc(r.comment||'بدون تعليق')}</p><small class="muted">العميل: ${esc(r.user_id)} · ${fmtDate(r.created_at)}</small></div><button class="${r.is_visible?'danger':'primary'} small" data-review-visibility="${r.id}" data-visible="${r.is_visible?'true':'false'}">${r.is_visible?'إخفاء':'نشر'}</button></div>`}).join('')||'<div class="empty">لا توجد تقييمات.</div>'}</div>`
 }
 
 function adminDashboard() {
@@ -982,7 +1002,8 @@ function adminSettings() {
 }
 
 function wireAdminEvents() {
-  document.querySelector('#productForm')?.addEventListener('submit',addProduct)
+  document.querySelectorAll('[data-review-visibility]').forEach(b=>b.onclick=async()=>{const next=b.dataset.visible!=='true';const {error}=await supabase.from('product_reviews').update({is_visible:next}).eq('id',b.dataset.reviewVisibility);if(error)return toast(error.message,'error');toast(next?'تم نشر التقييم':'تم إخفاء التقييم','success');await render()})
+    document.querySelector('#productForm')?.addEventListener('submit',addProduct)
   document.querySelector('#categoryForm')?.addEventListener('submit',addCategory)
   document.querySelectorAll('[data-update-product]').forEach(b=>b.onclick=()=>updateProduct(b.dataset.updateProduct))
   document.querySelectorAll('[data-toggle-product]').forEach(b=>b.onclick=()=>toggleProduct(b.dataset.toggleProduct))
