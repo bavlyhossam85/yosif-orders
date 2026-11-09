@@ -399,3 +399,5 @@ input:focus,textarea:focus,select:focus{
 .order-line-items{display:grid;gap:6px;margin:8px 0;padding:10px;background:var(--surface-1);border-radius:10px}.order-line-items .row{display:flex;justify-content:space-between;gap:10px}
 
 .cross-sell{margin:14px 0;padding:12px;border:1px dashed #94a3b8;border-radius:12px}.cross-sell-items{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.cross-sell-items button{max-width:100%;white-space:normal}
+
+.order-fulfillment-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.order-fulfillment-meta a{display:inline-flex;align-items:center;padding:6px 10px;border-radius:8px;background:var(--surface-2);color:inherit;text-decoration:none}
