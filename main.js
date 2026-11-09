@@ -775,7 +775,7 @@ function wireCustomerEvents() {
   document.querySelectorAll('[data-favorite]').forEach(b=>b.onclick=()=>toggleFavorite(b.dataset.favorite))
   document.querySelectorAll('[data-open-review]').forEach(b=>b.onclick=()=>openProductReview(b.dataset.openReview))
   document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{ if(!isClosed){const p=products.find(x=>x.id===b.dataset.product);if(p&&getProductOptionGroups(p).length)openProductOptions(p);else addToCart(b.dataset.product)} })
-  document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
+  document.querySelectorAll('[data-cart-qty]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.cartQty);if(!cart[i])return;cart[i].quantity=Math.max(1,Math.min(100,cart[i].quantity+Number(b.dataset.delta)));localStorage.setItem('yosif_cart',JSON.stringify(cart));syncAbandonedCartReminder();renderCustomer()})
   document.querySelectorAll('[data-cart-remove]').forEach(b=>b.onclick=()=>{cart.splice(Number(b.dataset.cartRemove),1);localStorage.setItem('yosif_cart',JSON.stringify(cart));renderCustomer()})
   document.querySelectorAll('[data-cart-note]').forEach(el=>el.onchange=()=>{const i=Number(el.dataset.cartNote);if(cart[i]){cart[i].item_note=el.value;localStorage.setItem('yosif_cart',JSON.stringify(cart))}})
   document.querySelector('#shareCartWhatsApp')?.addEventListener('click',shareCartWhatsApp)
@@ -930,6 +930,7 @@ async function submitOrder(e) {
   
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
   cart = []; localStorage.removeItem('yosif_cart');
+  await syncAbandonedCartReminder();
   selectedLocation = null;
   deliveryZoneCheck = null;
   window.voiceBlob = null; 
@@ -1504,7 +1505,24 @@ async function showNotifications() {
 }
 
 
-async function ensureSupportConversation() {
+async async function syncAbandonedCartReminder() {
+  if (!session?.user?.id || isAdmin()) return
+  try {
+    if (cart.length) {
+      const { error } = await supabase.from('yosif_abandoned_carts').upsert({
+        user_id: session.user.id,
+        cart_snapshot: cart.map(item => ({ product_id: item.product_id, quantity: Number(item.quantity || 1) })),
+        last_activity_at: new Date().toISOString(), reminder_sent_at: null, dismissed_at: null
+      }, { onConflict: 'user_id' })
+      if (error) console.warn('Cart reminder sync:', error.message)
+    } else {
+      const { error } = await supabase.from('yosif_abandoned_carts').delete().eq('user_id', session.user.id)
+      if (error) console.warn('Cart reminder clear:', error.message)
+    }
+  } catch (error) { console.warn('Cart reminder sync:', error) }
+}
+
+function ensureSupportConversation() {
   if (isAdmin()) throw new Error('الأدمن يختار محادثة عميل أولاً.')
   if (supportConversation?.id) return supportConversation
   const { data: existing, error: findError } = await supabase.from('yosif_support_conversations').select('*').eq('customer_id', session.user.id).maybeSingle()
