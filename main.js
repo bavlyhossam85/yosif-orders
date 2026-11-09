@@ -654,15 +654,18 @@ async function submitOrder(e) {
   let finalNotes = `الاسم: ${nameInput} | العنوان: ${addressInput} | التفاصيل: ${detailsInput}`;
   if (voiceUrl) finalNotes += `\n🎤 تسجيل صوتي: ${voiceUrl}`;
 
-  const {data, error} = await supabase.from('orders').insert({
-    customer_id: session.user.id,
-    phone: phoneInput,
-    custom_request: titleInput,
-    customer_notes: finalNotes,
-    attached_images: uploadedImages,
-    subtotal: 0, shipping_fee: 0, tip: tip, payment_fee: 0, total: 0, 
-    payment_method: pay, payment_proof_url: null, status: 'pending_review' 
-  }).select().single()
+  const { data, error } = await supabase.rpc('create_customer_order', {
+    p_phone: phoneInput,
+    p_custom_request: titleInput,
+    p_customer_notes: finalNotes,
+    p_attached_images: uploadedImages,
+    p_payment_method: pay,
+    p_tip: tip,
+    p_items: [],
+    p_scheduled_for: null,
+    p_latitude: null,
+    p_longitude: null
+  })
   
   if (error) { toast(error.message, 'error'); btn.textContent = originalText; btn.disabled = false; return; }
   
