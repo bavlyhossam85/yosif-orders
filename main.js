@@ -761,7 +761,7 @@ function wireCustomerEvents() {
       }
       deliveryZoneCheck = data || { inside: false };
       if (deliveryZoneCheck.inside) {
-        if (status) status.textContent = `✅ داخل منطقة ${deliveryZoneCheck.name} · التوصيل ${money(deliveryZoneCheck.delivery_fee)} · الحد الأدنى ${money(deliveryZoneCheck.min_order)}`;
+        if (status) status.textContent = `✅ داخل منطقة ${deliveryZoneCheck.name} · رسوم التوصيل ${money(deliveryZoneCheck.delivery_fee)}`;
         toast('موقعك داخل نطاق التوصيل: ' + deliveryZoneCheck.name, 'success');
       } else {
         if (status) status.textContent = '⚠️ الموقع خارج مناطق التوصيل المتاحة حالياً.';
@@ -1136,9 +1136,8 @@ function adminSettings() {
   <label>رقم WhatsApp والمحفظة</label><input id="waNumber" value="${esc(wa)}" placeholder="2010xxxxxxxx">
   <button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
   <div class="card"><div class="section-head"><h3>🗺️ مناطق التوصيل</h3><span class="muted">ارسم أكثر من منطقة على الخريطة</span></div>
-  <p class="muted">ارسم مضلعاً يغطي حدود المنطقة، ثم احفظ الاسم ورسوم التوصيل والحد الأدنى. يمكن تعديل حدود المناطق أو حذفها من أدوات الخريطة.</p>
+  <p class="muted">ارسم مضلعاً يغطي حدود المنطقة، ثم احفظ الاسم ورسوم التوصيل. لا يوجد حد أدنى لقيمة الطلب. يمكن تعديل حدود المناطق أو حذفها من أدوات الخريطة.</p>
   <div class="grid2"><label>اسم المنطقة<input id="deliveryZoneName" maxlength="100" placeholder="مثلاً: شبرا البلد"></label><label>رسوم التوصيل (جنيه)<input id="deliveryZoneFee" type="number" min="0" max="10000" step="0.01" value="10"></label></div>
-  <label>الحد الأدنى للطلب (جنيه)<input id="deliveryZoneMin" type="number" min="0" max="100000" step="0.01" value="0"></label>
   <div id="deliveryZoneMap" class="delivery-zone-map" role="application" aria-label="خريطة رسم مناطق التوصيل"></div>
   <p id="deliveryZoneStatus" class="muted" aria-live="polite">جاري تجهيز الخريطة...</p>
   <div id="deliveryZoneList" class="delivery-zone-list"></div></div>
@@ -1192,17 +1191,16 @@ async function initDeliveryZoneEditor() {
         layer=window.L.circle([lat,lng],{radius,color:zone.active===false?'#9ca3af':'#0e7490'});
       } else return;
       layer.feature={type:'Feature',properties:{zoneId:zone.id}};
-      layer.bindPopup(`<b>${esc(zone.name||'منطقة توصيل')}</b><br>${money(zone.delivery_fee)} · الحد الأدنى ${money(zone.min_order)}`);
+      layer.bindPopup(`<b>${esc(zone.name||'منطقة توصيل')}</b><br>رسوم التوصيل: ${money(zone.delivery_fee)}`);
       deliveryZoneLayers.addLayer(layer);
     });
     deliveryZoneMap.on(window.L.Draw.Event.CREATED,async event=>{
       const layer=event.layer;
       const name=document.querySelector('#deliveryZoneName')?.value.trim();
       const delivery_fee=Number(document.querySelector('#deliveryZoneFee')?.value||0);
-      const min_order=Number(document.querySelector('#deliveryZoneMin')?.value||0);
-      if(!name || !Number.isFinite(delivery_fee)||delivery_fee<0||!Number.isFinite(min_order)||min_order<0){toast('اكتب اسم المنطقة ورسوم وحد أدنى صحيحين قبل الحفظ','error');return;}
+      if(!name || !Number.isFinite(delivery_fee)||delivery_fee<0){toast('اكتب اسم المنطقة ورسوم توصيل صحيحة قبل الحفظ','error');return;}
       const polygon=layer.toGeoJSON().geometry;
-      const {data,error}=await supabase.from('delivery_zones').insert({name,delivery_fee,min_order,polygon,active:true}).select().single();
+      const {data,error}=await supabase.from('delivery_zones').insert({name,delivery_fee,min_order:0,polygon,active:true}).select().single();
       if(error){toast('تعذر حفظ المنطقة: '+error.message,'error');return;}
       layer.feature={type:'Feature',properties:{zoneId:data.id}};layer.bindPopup(`<b>${esc(name)}</b><br>${money(delivery_fee)}`);deliveryZoneLayers.addLayer(layer);
       adminDeliveryZones.push(data);renderDeliveryZoneList();toast('تم حفظ منطقة التوصيل','success');
@@ -1229,7 +1227,7 @@ async function initDeliveryZoneEditor() {
 
 function renderDeliveryZoneList() {
   const el=document.querySelector('#deliveryZoneList');if(!el)return;
-  el.innerHTML=adminDeliveryZones.map(z=>`<div class="delivery-zone-row"><div><b>${esc(z.name||'منطقة بدون اسم')}</b><small>${money(z.delivery_fee)} توصيل · حد أدنى ${money(z.min_order)} · ${z.active?'مفعّلة':'موقوفة'}</small></div><button type="button" class="secondary small" data-zone-toggle="${z.id}">${z.active?'إيقاف':'تفعيل'}</button></div>`).join('')||'<p class="muted">لا توجد مناطق محفوظة حتى الآن.</p>';
+  el.innerHTML=adminDeliveryZones.map(z=>`<div class="delivery-zone-row"><div><b>${esc(z.name||'منطقة بدون اسم')}</b><small>${money(z.delivery_fee)} توصيل · ${z.active?'مفعّلة':'موقوفة'}</small></div><button type="button" class="secondary small" data-zone-toggle="${z.id}">${z.active?'إيقاف':'تفعيل'}</button></div>`).join('')||'<p class="muted">لا توجد مناطق محفوظة حتى الآن.</p>';
   el.querySelectorAll('[data-zone-toggle]').forEach(btn=>btn.onclick=async()=>{const zone=adminDeliveryZones.find(z=>z.id===btn.dataset.zoneToggle);if(!zone)return;const {error}=await supabase.from('delivery_zones').update({active:!zone.active}).eq('id',zone.id);if(error)return toast(error.message,'error');zone.active=!zone.active;toast(zone.active?'تم تفعيل المنطقة':'تم إيقاف المنطقة','success');await render();});
 }
 
