@@ -276,6 +276,25 @@ create policy "Admins delete payment proofs"
   on storage.objects for delete to authenticated
   using (bucket_id = 'payment-proofs' and public.is_admin());
 
+-- Admin-only maintenance for feature configuration tables.
+drop policy if exists "Admins manage coupons" on public.coupons;
+create policy "Admins manage coupons"
+  on public.coupons for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "Admins manage spin settings" on public.spin_settings;
+create policy "Admins manage spin settings"
+  on public.spin_settings for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+drop policy if exists "Admins manage delivery zones" on public.delivery_zones;
+create policy "Admins manage delivery zones"
+  on public.delivery_zones for all to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
 -- Atomic receipt submission: validates order ownership and writes the receipt
 -- record. The path must be a private payment-proofs object under the caller.
 create or replace function public.submit_payment_receipt(
