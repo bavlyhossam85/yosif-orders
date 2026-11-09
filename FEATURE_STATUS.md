@@ -66,3 +66,20 @@
 - Updated the customer checkout UI with coupon and reward selectors, and changed admin order saving to use the protected pricing/cancellation RPCs instead of direct order-total updates.
 - Updated `spin_customer_wheel` in migration 004 so percentage rewards use the existing `customer_rewards.reward_type='percentage_discount'` CHECK value rather than the unsupported literal `discount`.
 - Migration 004 was reported applied by the user; its live runtime behavior has not yet been verified. No production deployment was made.
+
+
+## Phase 1 implementation update — support, Push, abandoned carts
+
+Implemented on the audit branch:
+- Private customer/admin support conversations and messages, unread counters, read receipts, Realtime subscriptions, and draggable customer support shortcut.
+- Protected OneSignal API support-message routing, plus aligned Web SDK/client/server App ID to the previously confirmed app `6b3d2509-bbcb-4b13-8647-7f4999103f59`.
+- Server-side abandoned-cart activity queue and Supabase Edge Function that sends a single reminder after 45 minutes idle and suppresses it if a newer order exists.
+- Added migration `202611090008_support_and_cart_reminders.sql` and Supabase function config.
+
+Still requires external setup/runtime verification:
+- Apply migration 008 in Supabase.
+- Deploy the Edge Function, configure its secrets, enable pg_cron/pg_net, and schedule the 15-minute worker.
+- Configure the server-only Vercel Supabase secret and re-save the OneSignal REST API key for the confirmed App ID in the admin settings.
+- Test chat privacy, unread/read behavior, chat/order/broadcast Push, and abandoned-cart timing on real test accounts/devices.
+
+GitHub Actions build passed for commit `57dbf497f578c91bb73c02724d8c126550a9936e`. No merge or Production deployment has been performed.
