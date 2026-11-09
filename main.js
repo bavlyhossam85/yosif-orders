@@ -23,6 +23,7 @@ let realtimeChannels = []
 let activeCategory = 'الكل'
 let productSearch = ''
 let saleCountdownTimer = null
+let selectedLocation = null
 let favorites = new Set(JSON.parse(localStorage.getItem('yosif_favorites') || '[]'))
 let cart = JSON.parse(localStorage.getItem('yosif_cart') || '[]')
 
@@ -521,6 +522,7 @@ function newOrderView(prefill={}) {
       <input id="oAddress" required placeholder="المنطقة، الشارع، الشقة..." style="flex:1;">
       <button type="button" id="getLocBtn" class="secondary" title="سحب موقعي تلقائياً" style="padding: 12px; border-radius: 12px; background: #e0e7ff; color: #3730a3;">📍</button>
     </div>
+    <label>موعد الاستلام أو التوصيل (اختياري)</label><input id="oScheduled" type="datetime-local">
 
     <label>طلب إضافي أو طلب خارجي (اختياري)</label><input id="oTitle" value="${esc(prefill.title||'')}" placeholder="اكتب أي شيء غير موجود في المتجر">
     
@@ -646,11 +648,13 @@ function wireCustomerEvents() {
   })
 
   document.querySelector('#getLocBtn')?.addEventListener('click', () => {
+    if (!navigator.geolocation) return toast('المتصفح لا يدعم تحديد الموقع', 'error')
     toast('جاري تحديد موقعك...', 'info');
     navigator.geolocation.getCurrentPosition(pos => {
+      selectedLocation = { latitude: pos.coords.latitude, longitude: pos.coords.longitude }
       document.querySelector('#oAddress').value += ` | 📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-      toast('تم إضافة موقعك على الخريطة بنجاح', 'success');
-    }, () => toast('فشل تحديد الموقع، يرجى تفعيل الـ GPS', 'error'));
+      toast('تم حفظ إحداثيات موقعك مع الطلب', 'success');
+    }, () => toast('فشل تحديد الموقع، يرجى تفعيل GPS والسماح للموقع', 'error'), { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
   });
 
   document.querySelector('#startVoice')?.addEventListener('click', async (e) => {
@@ -740,9 +744,9 @@ async function submitOrder(e) {
     p_payment_method: pay,
     p_tip: tip,
     p_items: cartItems,
-    p_scheduled_for: null,
-    p_latitude: null,
-    p_longitude: null
+    p_scheduled_for: document.querySelector('#oScheduled')?.value ? new Date(document.querySelector('#oScheduled').value).toISOString() : null,
+    p_latitude: selectedLocation?.latitude ?? null,
+    p_longitude: selectedLocation?.longitude ?? null
   })
   
   if (error) { toast(error.message, 'error'); btn.textContent = originalText; btn.disabled = false; return; }
@@ -755,6 +759,7 @@ async function submitOrder(e) {
   
   toast(`تم إرسال الطلب بنجاح`,'success'); beep(); 
   cart = []; localStorage.removeItem('yosif_cart');
+  selectedLocation = null;
   window.voiceBlob = null; 
   customerView = 'orders'; await render(); 
   
