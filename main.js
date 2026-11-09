@@ -42,6 +42,7 @@ let supportConversation = null
 let supportConversations = []
 let supportMessages = []
 let supportUnreadCount = 0
+let supportUnreadByConversation = {}
 let activeSupportConversationId = null
 let supportDragMoved = false
 
@@ -335,16 +336,17 @@ async function loadCommon() {
   supportConversations = conversationResult.error ? [] : (isAdmin() ? (conversationResult.data || []) : (conversationResult.data ? [conversationResult.data] : []))
   supportConversation = isAdmin() ? null : (supportConversations[0] || null)
   const unreadRows = unreadResult.error ? [] : (unreadResult.data || [])
-  supportUnreadCount = unreadRows.filter(m => !m.read_at && m.sender_id !== session.user.id).length
+  supportUnreadByConversation = unreadRows.filter(m => !m.read_at && m.sender_id !== session.user.id).reduce((map, m) => { map[m.conversation_id] = (map[m.conversation_id] || 0) + 1; return map }, {})
+  supportUnreadCount = Object.values(supportUnreadByConversation).reduce((sum, n) => sum + n, 0)
   if (isAdmin() && !activeSupportConversationId && supportConversations.length) activeSupportConversationId = supportConversations[0].id
   const selectedConversationId = isAdmin() ? activeSupportConversationId : supportConversation?.id
-  if (selectedConversationId && (isAdmin() || customerView === 'support' || adminView === 'support')) {
+  if (selectedConversationId && (isAdmin() ? adminView === 'support' : customerView === 'support')) {
     const { data: chatRows, error: chatError } = await supabase.from('yosif_support_messages').select('*').eq('conversation_id', selectedConversationId).order('created_at', { ascending: true })
     supportMessages = chatError ? [] : (chatRows || [])
     if (!chatError) {
       const { error: readError } = await supabase.rpc('mark_yosif_support_read', { p_conversation_id: selectedConversationId })
       if (readError) console.warn('Could not mark support messages read:', readError.message)
-      else supportUnreadCount = Math.max(0, supportUnreadCount - supportMessages.filter(m => !m.read_at && m.sender_id !== session.user.id).length)
+      else { const cleared = supportMessages.filter(m => !m.read_at && m.sender_id !== session.user.id).length; supportUnreadCount = Math.max(0, supportUnreadCount - cleared); supportUnreadByConversation[selectedConversationId] = 0 }
     }
   } else supportMessages = []
 
@@ -563,6 +565,7 @@ function addToCart(productId, selectedOptions = {}) {
   if (item) item.quantity = Math.min(100, Number(item.quantity || 1) + 1)
   else cart.push({ product_id: productId, quantity: 1, selected_options: selectedOptions||{}, item_note: '' })
   localStorage.setItem('yosif_cart', JSON.stringify(cart))
+  syncAbandonedCartReminder()
   toast(`تمت إضافة ${p.name} للسلة`, 'success')
   renderCustomer()
 }
@@ -1545,7 +1548,7 @@ function renderSupportChat() {
   const messages = supportMessages.filter(m => m.conversation_id === selectedId)
   const list = isAdmin() ? `<aside class="support-threads">${supportConversations.map(thread => {
     const customer = adminProfiles.find(p => p.id === thread.customer_id)
-    const unread = messages.filter(m => m.conversation_id === thread.id && !m.read_at && m.sender_id !== session.user.id).length
+    const unread = supportUnreadByConversation[thread.id] || 0
     return `<button class="support-thread ${thread.id===selectedId?'active':''}" data-chat-open="${thread.id}"><b>${esc(customer?.email || thread.customer_id.slice(0,8))}</b><small>${fmtDate(thread.last_message_at || thread.created_at)}</small>${unread? `<span class="badge">${unread}</span>` : ''}</button>`
   }).join('') || '<div class="empty">لا توجد محادثات حتى الآن.</div>'}</aside>` : ''
   return `<section class="support-layout">${list}<div class="support-panel"><div class="section-head"><h3>💬 ${isAdmin() ? (selected ? 'محادثة العميل' : 'اختر محادثة') : 'الدعم الفني'}</h3><small class="muted">${selected ? 'رسائل خاصة بينك وبين إدارة المتجر' : ''}</small></div>
