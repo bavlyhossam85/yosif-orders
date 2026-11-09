@@ -35,14 +35,14 @@ export default async function handler(req, res) {
     const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
     if (profileError) throw profileError;
-    const { action, app_id, rest_api_key, event_type, order_id, title, message } = req.body || {};
+    const { action, app_id, rest_api_key, event_type, order_id, message_id, title, message } = req.body || {};
     const isAdmin = profile?.role === 'admin';
     // Customers may request only the order-created event for an order they own.
     // All key-management, test, broadcast, and order-updated actions remain admin-only.
     if (!isAdmin && !(action === 'send' && event_type === 'order_created')) {
       return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
     }
-    if (app_id !== '97987044-7348-4399-bb86-eb5c8d9fa799') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
+    if (app_id !== '6b3d2509-bbcb-4b13-8647-7f4999103f59') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
 
     if (action === 'save_key') {
       const key = String(rest_api_key || '').trim();
@@ -89,6 +89,25 @@ export default async function handler(req, res) {
       recipients = [order.customer_id];
       notificationTitle = 'تحديث الطلب 🛍️';
       notificationBody = 'تم تحديث حالة طلبك #' + order.order_no;
+    } else if (event_type === 'chat_message') {
+      const { data: chatMessage, error: messageError } = await admin.from('yosif_support_messages')
+        .select('id,conversation_id,sender_id,body').eq('id', message_id).maybeSingle();
+      if (messageError) throw messageError;
+      if (!chatMessage || chatMessage.sender_id !== authData.user.id) return json(res, 403, { error: 'Forbidden' });
+      const { data: conversation, error: conversationError } = await admin.from('yosif_support_conversations')
+        .select('id,customer_id').eq('id', chatMessage.conversation_id).maybeSingle();
+      if (conversationError) throw conversationError;
+      if (!conversation) return json(res, 404, { error: 'Conversation not found' });
+      if (isAdmin) {
+        recipients = [conversation.customer_id];
+      } else {
+        if (conversation.customer_id !== authData.user.id) return json(res, 403, { error: 'Forbidden' });
+        const { data: admins, error: adminsError } = await admin.from('profiles').select('id').eq('role', 'admin');
+        if (adminsError) throw adminsError;
+        recipients = (admins || []).map(row => row.id);
+      }
+      notificationTitle = isAdmin ? 'رد جديد من الدعم 💬' : 'رسالة جديدة من عميل 💬';
+      notificationBody = String(chatMessage.body || '').trim().slice(0, 140) || 'لديك رسالة جديدة في محادثة الدعم.';
     } else if (event_type === 'broadcast') {
       if (!notificationTitle || !notificationBody) return json(res, 400, { error: 'اكتب عنوان الإشعار ونص الرسالة.' });
       const { data: customers, error } = await admin.from('profiles').select('id').neq('role', 'admin');
