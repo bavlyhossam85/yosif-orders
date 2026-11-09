@@ -592,7 +592,7 @@ function customerOrders() {
 function orderItemsHtml(orderId) {
   const rows=orderItems.filter(item=>item.order_id===orderId)
   if(!rows.length)return ''
-  return `<div class="order-line-items">${rows.map(item=>`<div class="row"><span>${esc(item.product_name)} × ${Number(item.quantity)}</span><b>${money(item.line_total)}</b></div>${item.item_note?`<small class="muted">ملاحظة: ${esc(item.item_note)}</small>`:''}`).join('')}</div>`
+  return `<div class="order-line-items">${rows.map(item=>`<div class="row"><span>${esc(item.product_name)} × ${Number(item.quantity)}</span><b>${money(item.line_total)}</b></div>${item.selected_options&&Object.keys(item.selected_options).length?`<small class="muted">${esc(Object.entries(item.selected_options).map(([k,v])=>k+': '+v).join(' • '))}</small>`:''}${item.item_note?`<small class="muted">ملاحظة: ${esc(item.item_note)}</small>`:''}`).join('')}</div>`
 }
 
 function orderCard(o) {
