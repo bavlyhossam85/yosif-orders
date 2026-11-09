@@ -28,11 +28,67 @@ export default async function handler(req, res) {
     const secret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!secret) return json(res, 503, { error: 'يلزم إضافة SUPABASE_SECRET_KEY في إعدادات Vercel بعد تدوير المفتاح المكشوف.' });
     const auth = req.headers.authorization || '';
+    const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
+
+    // Scheduled cart reminders use the same encrypted REST key saved from Admin > OneSignal.
+    // CRON_SECRET only authenticates the scheduler; it is not an OneSignal credential.
+    if (process.env.CRON_SECRET && auth === 'Bearer ' + process.env.CRON_SECRET) {
+      const { data: setting, error: settingError } = await admin.from('settings')
+        .select('value').eq('key', 'onesignal_rest_api_key_encrypted').maybeSingle();
+      if (settingError) throw settingError;
+      if (!setting?.value) return json(res, 400, { error: 'احفظ OneSignal REST API Key من لوحة الأدمن أولاً.' });
+      const restKey = decryptSecret(setting.value);
+      const appId = '6b3d2509-bbcb-4b13-8647-7f4999103f59';
+      const cutoff = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+      const { data: carts, error: cartsError } = await admin.from('yosif_abandoned_carts')
+        .select('user_id,cart_snapshot,last_activity_at')
+        .is('reminder_sent_at', null).is('dismissed_at', null)
+        .lt('last_activity_at', cutoff).limit(500);
+      if (cartsError) throw cartsError;
+      const eligible = [];
+      for (const cart of carts || []) {
+        if (!Array.isArray(cart.cart_snapshot) || !cart.cart_snapshot.length) {
+          await admin.from('yosif_abandoned_carts').delete().eq('user_id', cart.user_id);
+          continue;
+        }
+        const { data: recentOrders, error: orderError } = await admin.from('orders')
+          .select('id').eq('customer_id', cart.user_id).gt('created_at', cart.last_activity_at).limit(1);
+        if (orderError) throw orderError;
+        if (recentOrders?.length) {
+          await admin.from('yosif_abandoned_carts').delete().eq('user_id', cart.user_id);
+          continue;
+        }
+        eligible.push(cart.user_id);
+      }
+      if (!eligible.length) return json(res, 200, { success: true, sent: 0 });
+      const push = await fetch('https://api.onesignal.com/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Key ' + restKey },
+        body: JSON.stringify({
+          app_id: appId, include_aliases: { external_id: eligible }, target_channel: 'push',
+          headings: { ar: 'سلتك مستنياك 🛒', en: 'Your cart is waiting 🛒' },
+          contents: { ar: 'لسه عندك منتجات في سلتك. كمّل طلبك وقت ما تحب.', en: 'You still have items in your cart. Complete your order whenever you are ready.' }
+        })
+      });
+      const result = await push.json().catch(() => ({}));
+      if (!push.ok) return json(res, 502, { error: 'فشل إرسال تذكير السلة من OneSignal.', details: result });
+      const sentAt = new Date().toISOString();
+      const { error: updateError } = await admin.from('yosif_abandoned_carts')
+        .update({ reminder_sent_at: sentAt }).in('user_id', eligible);
+      if (updateError) throw updateError;
+      const rows = eligible.map(user_id => ({
+        user_id, order_id: null, type: 'abandoned_cart',
+        title: 'سلتك مستنياك 🛒', body: 'لسه عندك منتجات في سلتك. كمّل طلبك وقت ما تحب.'
+      }));
+      const saved = await admin.from('notifications').insert(rows);
+      if (saved.error) console.warn('Could not persist cart reminder in-app notifications:', saved.error);
+      return json(res, 200, { success: true, sent: eligible.length, result });
+    }
+
     if (!auth.startsWith('Bearer ')) return json(res, 401, { error: 'Unauthorized' });
     const userClient = createClient(url, publishable, { global: { headers: { Authorization: auth } }, auth: { persistSession: false, autoRefreshToken: false } });
     const { data: authData, error: authError } = await userClient.auth.getUser();
     if (authError || !authData.user) return json(res, 401, { error: 'جلسة الدخول غير صالحة؛ سجّل الدخول مرة أخرى.' });
-    const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
     if (profileError) throw profileError;
     const { action, app_id, rest_api_key, event_type, order_id, message_id, title, message } = req.body || {};
