@@ -295,6 +295,23 @@ create policy "Admins manage delivery zones"
   using (public.is_admin())
   with check (public.is_admin());
 
+-- Prevent browser clients from bypassing the authoritative order RPC with
+-- arbitrary subtotal/total values. Admin ALL policies are intentionally retained.
+do $
+declare p record;
+begin
+  for p in
+    select policyname
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'orders'
+      and cmd = 'INSERT'
+  loop
+    execute format('drop policy if exists %I on public.orders', p.policyname);
+  end loop;
+end;
+$;
+
 -- Atomic receipt submission: validates order ownership and writes the receipt
 -- record. The path must be a private payment-proofs object under the caller.
 create or replace function public.submit_payment_receipt(
