@@ -12,7 +12,7 @@
 - Added scheduled delivery datetime and GPS coordinate persistence, plus map links in customer/admin order cards.
 - Customer payment proof upload now targets the private `payment-proofs` bucket and calls `submit_payment_receipt`; it no longer attempts a customer-side UPDATE of the sensitive `orders` row.
 - Admin receipt review controls call the `review_payment_receipt` RPC. Receipt previews use short-lived signed URLs from the private bucket.
-- Added `supabase/migrations/202611090003_wallet_wheel_hardening.sql`: server-side wallet delta adjustment and explicit set-balance RPCs (including zeroing), positive-magnitude ledger entries with direction in `transaction_type`, row locking, balance bounds, and a serialized daily wheel spin RPC that credits wallet rewards or issues expiring discount/free-delivery rewards. This migration is not applied and requires checking the live `customer_rewards.reward_type` and `wallet_transactions.transaction_type` constraints before application.
+- Added `supabase/migrations/202611090003_wallet_wheel_hardening.sql`: server-side wallet delta adjustment and explicit set-balance RPCs (including zeroing), positive-magnitude ledger entries with direction in `transaction_type`, row locking, balance bounds, and a serialized daily wheel spin RPC that credits wallet rewards or issues expiring discount/free-delivery rewards. The user has confirmed applying this migration; live runtime behavior still needs testing.
 - Added two manual Supabase migrations:
   - `supabase/migrations/202611090001_rls_and_payment_receipts.sql`
   - `supabase/migrations/202611090002_atomic_customer_orders.sql`
@@ -27,21 +27,21 @@
 - Basic order form, voice recording, image upload, GPS link capture, admin product/order/settings screens, thermal-style browser printing, CSV export, and OneSignal broadcast UI.
 
 ## Still incomplete or not verified
-- A real interactive cart with line items, options, per-item notes, animated add-to-cart, cross-sell, wishlist sync, reviews, and flash-sale countdown/enforcement.
+- Animated add-to-cart/cart interactions and option-specific price adjustments.
 - Multi-polygon delivery-zone editor and authoritative server-side point-in-polygon checks; precise customer/admin map pin workflows.
-- Wallet checkout debit/refund and idempotent cancellation refunds, coupon validation/redemption, reward application at checkout, and customer/admin UI wiring remain incomplete. The new wallet adjustment/set-balance and daily wheel RPCs are backend foundations only; they have not been applied or runtime-tested.
+- Customer wallet balance and ledger view, daily wheel spin, and admin wallet adjustment/set-balance plus wheel configuration UI are now wired to the RPCs from migration 003. Wallet checkout debit/refund, idempotent cancellation refunds, coupon validation/redemption, and applying discount/free-delivery rewards at checkout remain incomplete. Active coupons are displayed to customers but cannot yet be redeemed.
 - Full installment/tab eligibility, schedule generation, payment ledger, and settlement workflows.
 - Persistent customer/admin chat, attachment/voice messages, unread counters, and OneSignal chat notifications.
 - Server-scheduled abandoned-cart reminders.
 - Complete financial dashboard/charting, purchase aggregation by category, customer account management, and audited safe admin impersonation.
 - Realtime coverage for every required table/event and real-device Push delivery.
-- Admin category management and complete product options/flash-sale editing.
+- Full category editing/deletion and advanced product option/flash-sale management.
 
 ## Required manual setup and verification
-1. Review both SQL migrations against the live schema, then apply them manually in Supabase SQL Editor. The migrations are not auto-applied.
+1. Migration `202611090003_wallet_wheel_hardening.sql` was reported applied by the user. Confirm the earlier `202611090001` and `202611090002` migrations are also applied before relying on their RLS, receipt, and atomic-order functions.
 2. Confirm the `payment-proofs` bucket exists and is private. The migration adds object policies but does not move existing objects or change bucket visibility.
 3. Confirm the Vercel environment has the required Supabase server secret and OneSignal encryption configuration before testing the protected API. Never add server secrets to `config.js`.
-4. Run `npm ci` and `npm run build`; then exercise customer order creation, receipt upload, admin receipt review, OneSignal order-created push, order-updated push, and broadcast on a non-production test account.
+4. Run `npm ci` and `npm run build`; then exercise wallet credit/debit/set-to-zero, wheel daily limit and reward issuance, customer ledger visibility, customer order creation, receipt upload/review, and OneSignal flows on non-production test accounts.
 5. Do not merge or deploy until migration and runtime tests pass.
 
 ## Safety notes
@@ -49,3 +49,10 @@
 - Do not grant broad customer UPDATE access to `orders`, wallet tables, receipts, or notifications.
 - Do not use public URLs for payment proof images.
 - No production database, customer data, order data, wallet balance, or Production deployment was changed by this branch.
+
+
+## Latest UI integration (audit branch, not deployed)
+- Customer navigation now includes a wallet/rewards screen with current balance, recent ledger entries, unredeemed rewards, active coupon visibility, and a daily-spin action calling `spin_customer_wheel`.
+- Admin navigation now includes loyalty controls: enable/disable the wheel, set the daily limit, edit reward JSON, and adjust/replace a selected customer's wallet balance through the protected RPCs. It also lists customer wallet balances.
+- Coupon redemption and wallet checkout are intentionally not exposed as working payment flows until transactional checkout/debit/refund RPCs are implemented.
+- No production deployment or live database changes were made by these UI commits.
