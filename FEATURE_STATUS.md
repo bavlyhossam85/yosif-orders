@@ -29,7 +29,7 @@
 
 ## Still incomplete or not verified
 - Animated add-to-cart/cart interactions and option-specific price adjustments.
-- Multi-polygon delivery-zone editor, authoritative server-side coverage checks, customer GPS validation, and admin polygon/circle rendering plus zone CRUD have been added on this branch. Requires migration 005 and browser verification.
+- Multi-polygon delivery-zone editor, server-side GPS coverage validation, automatic zone delivery fees, and minimum-order enforcement during pricing are implemented on this branch. Requires migration 006 and browser/runtime verification.
 - Wallet/rewards UI and checkout coupon/reward selection are wired to migrations 003 and 004. Live Supabase transaction behavior still requires testing.
 - Full installment/tab eligibility, schedule generation, payment ledger, and settlement workflows.
 - Persistent customer/admin chat, attachment/voice messages, unread counters, and OneSignal chat notifications.
@@ -39,7 +39,7 @@
 - Full category editing/deletion and advanced product option/flash-sale management.
 
 ## Required manual setup and verification
-1. The user reports applying migrations `202611090003_wallet_wheel_hardening.sql` and `202611090004_transactional_checkout_promotions.sql`. Confirm migrations `202611090001` and `202611090002` are also applied before relying on their RLS, receipt, and atomic-order functions. Apply migration `202611090005_delivery_zone_polygons.sql` before testing the new delivery-zone features.
+1. The user reports applying migrations `202611090003_wallet_wheel_hardening.sql` and `202611090004_transactional_checkout_promotions.sql`. Confirm migrations `202611090001` and `202611090002` are also applied before relying on their RLS, receipt, and atomic-order functions. The user reports applying migration `202611090005_delivery_zone_polygons.sql`. Apply migration `202611090006_zone_based_delivery_pricing.sql` before testing automatic delivery fees.
 2. Confirm the `payment-proofs` bucket exists and is private. The migration adds object policies but does not move existing objects or change bucket visibility.
 3. Confirm the Vercel environment has the required Supabase server secret and OneSignal encryption configuration before testing the protected API. Never add server secrets to `config.js`.
 4. Run `npm ci` and `npm run build`; then exercise wallet credit/debit/set-to-zero, wheel daily limit and reward issuance, coupon/reward selection, pricing with sufficient and insufficient wallet balances, cancellation refund idempotency, customer ledger visibility, customer order creation, receipt upload/review, and OneSignal flows on non-production test accounts.
