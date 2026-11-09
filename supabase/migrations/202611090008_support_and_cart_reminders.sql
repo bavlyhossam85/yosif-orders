@@ -140,16 +140,6 @@ end $$;
 
 commit;
 
--- Abandoned-cart push worker setup (one-time manual setup after deploying the Edge Function):
--- 1) Deploy: supabase functions deploy send-abandoned-cart-reminders --no-verify-jwt
--- 2) Set secrets: supabase secrets set ONESIGNAL_APP_ID=6b3d2509-bbcb-4b13-8647-7f4999103f59 ONESIGNAL_REST_API_KEY=<REST_API_KEY> CRON_SECRET=<LONG_RANDOM_SECRET>
--- 3) Enable pg_cron and pg_net in Supabase, then save Vault secrets named:
---      project_url = https://xsyhrxivvtqdernqxvyw.supabase.co
---      cart_reminder_cron_secret = the same CRON_SECRET
--- 4) Schedule every 15 minutes:
--- select cron.schedule('yosif-abandoned-cart-reminders','*/15 * * * *',
---   $$ select net.http_post(
---     url := (select decrypted_secret from vault.decrypted_secrets where name='project_url') || '/functions/v1/send-abandoned-cart-reminders',
---     headers := jsonb_build_object('Content-Type','application/json','Authorization','Bearer '||(select decrypted_secret from vault.decrypted_secrets where name='cart_reminder_cron_secret')),
---     body := '{}'::jsonb
---   ); $$);
+-- Abandoned-cart reminders are sent by the existing Vercel /api/onesignal endpoint.
+-- No Supabase Edge Function is used for OneSignal Push.
+-- Scheduler setup is documented in PHASE_1_SETUP.md.
