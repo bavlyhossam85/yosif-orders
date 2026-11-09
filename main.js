@@ -554,7 +554,7 @@ function addToCart(productId, selectedOptions = {}) {
   if (item) item.quantity = Math.min(100, Number(item.quantity || 1) + 1)
   else cart.push({ product_id: productId, quantity: 1, selected_options: selectedOptions||{}, item_note: '' })
   localStorage.setItem('yosif_cart', JSON.stringify(cart))
-  syncAbandonedCartReminder()
+  syncAbandonedCartReminder(true)
   toast(`تمت إضافة ${p.name} للسلة`, 'success')
   renderCustomer()
 }
