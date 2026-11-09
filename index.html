@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Yosif Orders | طلبات العيلة</title>
+    <meta name="description" content="يوسف اوردرز (Yosif Orders) - النظام الأسهل لطلب المنتجات، تتبع طلبك، والدفع بكل سهولة عبر كاش أو إنستاباي.">
+    <meta name="theme-color" content="#111827">
+    
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
+
+    <!-- كود OneSignal الأساسي -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "97987044-7348-4399-bb86-eb5c8d9fa799",
+          safari_web_id: "",
+          serviceWorkerPath: '/OneSignalSDKWorker.js',
+          serviceWorkerParam: { scope: '/' },
+          notifyButton: { enable: false },
+        });
+        
+        try {
+          await OneSignal.Slidedown.promptPush();
+        } catch (e) {
+          console.error("OneSignal Prompt Error:", e);
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

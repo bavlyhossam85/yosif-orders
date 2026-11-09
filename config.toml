@@ -1,0 +1,2 @@
+[functions.send-onesignal-push]
+verify_jwt = true

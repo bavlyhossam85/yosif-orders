@@ -1,0 +1,249 @@
+:root {
+  --primary: #111827;
+  --surface-1: #f3f5f9;
+  --surface-2: #eef2f7;
+}
+.dark {
+  --primary: #60a5fa;
+  --surface-1: #1e293b;
+  --surface-2: #0f172a;
+}
+*{box-sizing:border-box}
+
+/* إعدادات الخلفية الأساسية */
+html,body,#app{margin:0;min-height:100%;font-family:Arial,Tahoma,sans-serif}
+body{background:#f4f6fb;color:#000000;position:relative;overflow-x:hidden;z-index:0;}
+.dark body{background:#0b1220;color:#ffffff}
+
+/* ---- بداية الرسومات المتحركة في الخلفية ---- */
+body::before, body::after {
+  content: "";
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  z-index: -1;
+  opacity: 0.12; /* الوان شبه شفافة جداً */
+  animation: floatBg 15s infinite alternate ease-in-out;
+  pointer-events: none; /* عشان متمنعش الضغط على الزراير */
+}
+body::before {
+  width: 400px;
+  height: 400px;
+  background: var(--primary);
+  top: -100px;
+  right: -100px;
+}
+body::after {
+  width: 500px;
+  height: 500px;
+  background: #3b82f6;
+  bottom: -150px;
+  left: -150px;
+  animation-duration: 20s;
+  animation-direction: alternate-reverse;
+}
+.dark body::before, .dark body::after {
+  opacity: 0.08; /* شفافية أقل في الوضع الليلي لراحة العين */
+}
+
+@keyframes floatBg {
+  0% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 50px) scale(1.1); }
+  100% { transform: translate(30px, -50px) scale(0.9); }
+}
+/* ---- نهاية الرسومات المتحركة في الخلفية ---- */
+
+.dark .card,.dark .order-card,.dark .auth-card,.dark .sidebar,.dark .modal,.dark .product-card{background:#111a2b;color:#ffffff}
+.dark input,.dark textarea,.dark select{background:#0d1626;color:#ffffff;border-color:#2a3850}
+.dark .muted{color:#9aa8bd}
+.dark .secondary{background:#26334a;color:#ffffff}
+.dark .hero{background:linear-gradient(135deg,#172554,#111827)}
+
+/* إضافة حركة للزراير */
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:0;transition:transform 0.15s ease, opacity 0.2s;}
+button:active{transform:scale(0.95);}
+
+/* حركة لكارت تسجيل الدخول */
+.auth-shell{min-height:100vh;display:grid;place-items:center;padding:20px;background:transparent;}
+.auth-card{width:min(430px,100%);background:white;border-radius:24px;padding:30px;box-shadow:0 18px 60px #11182718;text-align:center;animation: popIn 0.5s ease-out;}
+@keyframes popIn {
+  0% { opacity: 0; transform: translateY(20px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.logo{font-size:46px;animation: bounceLogo 2s infinite ease-in-out;}
+@keyframes bounceLogo {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.auth-card h1{margin:5px 0}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#eef2f7;padding:5px;border-radius:14px;margin:22px 0}
+.tabs button{padding:10px;border-radius:10px;background:transparent}
+.tabs button.active{background:#111827;color:white}
+.auth-card form{text-align:right}
+.auth-card label,.card label{display:block;font-weight:700;font-size:13px;margin:9px 0 4px}
+.auth-card input,.card input,.card textarea,.card select,.toolbar input,.toolbar select,.searchrow input{width:100%;padding:12px;border:1px solid #d7dce5;border-radius:12px;background:white;outline:none;transition:border-color 0.3s;}
+.auth-card input:focus,.card input:focus,.card textarea:focus{border-color:var(--primary);}
+
+.primary{background:#111827;color:#fff;border-radius:12px;padding:12px 16px;font-weight:800}
+.primary.small,.secondary.small,.danger.small{padding:8px 11px;font-size:12px}
+.auth-card .primary{width:100%;margin-top:12px}
+.linkbtn{background:none;color:#475467;padding:14px}
+.auth-msg{min-height:20px;font-size:13px;color:#b42318;margin-top:8px}
+
+.topbar{height:64px;background:#111827;color:white;display:flex;align-items:center;justify-content:space-between;padding:0 18px;position:sticky;top:0;z-index:10}
+.brand{font-weight:900;font-size:20px}
+.top-actions{display:flex;gap:8px}
+.iconbtn{background:#253149;color:white;padding:9px 12px;border-radius:10px}
+.badge{background:#ef4444;border-radius:999px;padding:2px 6px;font-size:11px;animation: pulseBadge 1.5s infinite;}
+@keyframes pulseBadge {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.layout{display:flex;min-height:calc(100vh - 64px)}
+.sidebar{width:240px;background:white;border-left:1px solid #e5e7eb;padding:16px;position:sticky;top:64px;height:calc(100vh - 64px)}
+.userbox{padding:12px;background:#f3f5f9;border-radius:14px;margin-bottom:12px;display:flex;flex-direction:column;gap:5px;overflow:hidden}
+.userbox small{color:#667085}
+
+.navbtn{display:block;width:100%;text-align:right;background:transparent;padding:12px;border-radius:11px;margin:4px 0;font-weight:700;transition:all 0.2s ease;}
+.navbtn:hover:not(.active){transform:translateX(-5px); background:var(--surface-2);}
+.navbtn.active{background:#111827;color:white}
+
+.content{width:min(1100px,100%);padding:22px;margin:auto}
+.page-title h1{margin:0 0 18px}
+.hero{background:linear-gradient(135deg,#1e293b,#111827);color:white;border-radius:24px;padding:30px;margin-bottom:18px}
+.hero h2{font-size:30px;margin:8px 0}
+.eyebrow{opacity:.75}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.stats>div{background:white;border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:4px;box-shadow:0 5px 18px #1118270a;transition:transform 0.3s ease;}
+.stats>div:hover{transform:translateY(-3px);}
+.dark .stats>div{background:#111a2b}
+.stats b{font-size:28px}
+.muted{color:#667085;font-size:13px}
+.section-head{display:flex;justify-content:space-between;align-items:center;margin:18px 0 10px}
+
+/* إضافة حركات للكروت والطلبات */
+.card,.order-card{background:white;border-radius:18px;padding:18px;box-shadow:0 5px 18px #1118270a;margin:12px 0;transition:transform 0.3s ease, box-shadow 0.3s ease;}
+.card:hover:not(.empty), .order-card:hover{transform:translateY(-4px); box-shadow:0 12px 25px #11182715;}
+
+.order-card h3{margin:12px 0 5px}
+.row{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.order-meta{display:flex;justify-content:space-between;margin:12px 0}
+.status{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}
+.status-pending_review{background:#fff3cd;color:#8a5a00}
+.status-priced{background:#e0e7ff;color:#3730a3}
+.status-preparing{background:#dbeafe;color:#1d4ed8}
+.status-courier_near{background:#fef08a;color:#854d0e}
+.status-out_for_delivery{background:#ffedd5;color:#c2410c}
+.status-delivered{background:#dcfce7;color:#166534}
+.status-cancelled{background:#fee2e2;color:#991b1b}
+.secondary{background:#eef2f7;color:#172033;border-radius:12px;padding:10px 14px;font-weight:800}
+.danger{background:#fee2e2;color:#991b1b;border-radius:12px;padding:10px 14px;font-weight:800}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* كروت المنتجات */
+.product-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+.product-card{background:white;border-radius:18px;overflow:hidden;box-shadow:0 5px 18px #1118270a;transition:transform 0.3s ease, box-shadow 0.3s ease;}
+.product-card:hover{transform:translateY(-4px); box-shadow:0 12px 25px #11182715;}
+.product-card img,.product-placeholder{width:100%;height:170px;object-fit:cover;transition:transform 0.5s ease;}
+.product-card:hover img{transform:scale(1.05);}
+.product-placeholder{display:grid;place-items:center;background:#eef2ff;font-size:45px}
+.pbody{padding:14px;position:relative;z-index:2;background:inherit;}
+.pbody input{margin:4px 0}
+
+.actions{display:flex;gap:8px;align-items:center;margin-top:10px}
+.actions>*{flex:1}
+.pay-options{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0 12px}
+.pay-options label{background:#f3f5f9;padding:10px;border-radius:12px;cursor:pointer;transition:background 0.2s;}
+.pay-options label:hover{background:#e2e8f0;}
+.dark .pay-options label{background:#1e293b}
+.dark .pay-options label:hover{background:#334155;}
+.pay-options input{width:auto}
+
+.qrbox{text-align:center;background:#f8fafc;border-radius:15px;padding:15px;margin:10px 0}
+.qr{max-width:240px;width:100%;border-radius:12px}
+.hidden{display:none!important}
+.empty{text-align:center;padding:30px;color:#667085}
+.toolbar{display:grid;grid-template-columns:1fr 180px;gap:10px;margin-bottom:12px}
+.setting-img{display:block;width:160px;height:160px;object-fit:contain;margin:10px 0;border-radius:12px;background:#f8fafc}
+
+.notice{padding:12px;border-radius:12px;background:#fff8df;margin:7px 0;color:#000000}
+.notice.read{opacity:.6}
+
+/* نافذة التفاصيل (Modal) */
+.modal-backdrop{position:fixed;inset:0;background:#00000099;display:grid;place-items:center;padding:15px;z-index:50;backdrop-filter:blur(4px);animation: fadeIn 0.3s;}
+.modal{background:white;width:min(600px,100%);max-height:85vh;overflow:auto;border-radius:20px;padding:22px;position:relative;animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(30px) scale(0.95); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+
+.close{position:absolute;left:12px;top:10px;font-size:28px;background:none;transition:transform 0.2s;}
+.close:hover{transform:rotate(90deg);}
+
+.timeline>div{border-right:3px solid #dbeafe;padding:9px 12px;margin:7px 0;position:relative;}
+.timeline>div::before{content:'';position:absolute;right:-6px;top:14px;width:9px;height:9px;background:#3b82f6;border-radius:50%;}
+.timeline small{display:block;color:#667085;margin-top:3px}
+
+.toast{position:fixed;bottom:20px;left:20px;right:20px;margin:auto;max-width:420px;background:#111827;color:white;padding:14px 16px;border-radius:14px;z-index:100;text-align:center;box-shadow:0 12px 30px #0003;animation: slideUpToast 0.3s ease-out;}
+@keyframes slideUpToast { from { transform: translateY(50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.toast.success{background:#166534}
+.toast.error{background:#991b1b}
+
+.fatal{min-height:100vh;display:grid;place-items:center;text-align:center;padding:30px}
+.fatal>div{max-width:600px}
+.searchrow{margin-bottom:12px}
+
+@media(max-width:760px){
+  .layout{display:block}
+  .sidebar{width:auto;height:auto;position:static;display:flex;overflow:auto;gap:6px;padding:10px;}
+  .userbox{display:none}
+  .navbtn{white-space:nowrap;width:auto}
+  .content{padding:14px}
+  .stats{grid-template-columns:1fr 1fr}
+  .stats>div:last-child{grid-column:1/-1}
+  .grid2,.toolbar{grid-template-columns:1fr}
+  .topbar{padding:0 10px}
+  .brand{font-size:17px}
+  .top-actions .iconbtn{padding:8px}
+  .hero h2{font-size:24px}
+}
+/* Yosif Orders responsive enhancements */
+.product-tools{position:sticky;top:64px;z-index:5;background:rgba(244,246,251,.94);padding:10px 0 12px;backdrop-filter:blur(12px)}
+.dark .product-tools{background:rgba(11,18,32,.94)}
+.product-tools>input{width:100%;padding:13px 15px;border:1px solid #d7dce5;border-radius:13px;background:white;outline:none}
+.dark .product-tools>input{background:#0d1626;color:#fff;border-color:#2a3850}
+.category-tabs{display:flex;gap:8px;overflow-x:auto;padding:10px 2px 3px;scrollbar-width:thin}
+.category-tab{flex:0 0 auto;padding:9px 15px;border-radius:999px;background:var(--surface-2);font-weight:700;white-space:nowrap}
+.category-tab.active{background:#111827;color:#fff}
+.dark .category-tab.active{background:#60a5fa;color:#07111f}
+.favorite-btn{float:left;border-radius:50%;width:35px;height:35px;background:var(--surface-2);font-size:21px;color:#ef4444;line-height:1}
+.favorite-btn.is-favorite{background:#fee2e2}
+.dark .favorite-btn{background:#26334a}
+.modal-backdrop{cursor:pointer}
+.modal{cursor:default}
+button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:3px solid #60a5fa;outline-offset:2px}
+img{max-width:100%}
+@media(max-width:760px){
+  .product-tools{top:64px}
+  .topbar{gap:6px}
+  .top-actions{gap:5px}
+  .top-actions .iconbtn{font-size:12px;padding:8px 9px}
+  .sidebar{position:sticky;top:64px;z-index:8;background:rgba(255,255,255,.96);border-bottom:1px solid #e5e7eb;border-left:0;box-shadow:0 4px 12px #00000008}
+  .dark .sidebar{background:rgba(17,26,43,.96);border-color:#26334a}
+  .navbtn{padding:10px 12px;font-size:13px}
+  .content{padding:12px}
+  .product-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+  .product-card img,.product-placeholder{height:135px}
+  .pbody{padding:10px}
+  .pbody h3{font-size:15px;min-height:36px}
+  .stats{gap:8px}
+  .stats>div{padding:13px}
+  .stats b{font-size:23px}
+  .modal{max-height:90vh;padding:18px}
+}
+@media(max-width:380px){.brand{font-size:14px}.product-grid{grid-template-columns:1fr 1fr}.top-actions .iconbtn{padding:7px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
