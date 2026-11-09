@@ -1212,15 +1212,15 @@ async function deleteProduct(id) {
 }
 
 async function saveOrder(id) {
-  const price=Number(document.querySelector(\`.priceEdit[data-id="\${id}"]\`).value||0);
-  const shipping=Number(document.querySelector(\`.shippingEdit[data-id="\${id}"]\`).value||0);
-  const tip=Number(document.querySelector(\`.tipEdit[data-id="\${id}"]\`).value||0);
-  const status=document.querySelector(\`.statusEdit[data-id="\${id}"]\`).value;
+  const price=Number(document.querySelector(`.priceEdit[data-id="${id}"]`).value||0);
+  const shipping=Number(document.querySelector(`.shippingEdit[data-id="${id}"]`).value||0);
+  const tip=Number(document.querySelector(`.tipEdit[data-id="${id}"]`).value||0);
+  const status=document.querySelector(`.statusEdit[data-id="${id}"]`).value;
   const o=orders.find(x=>x.id===id);
   if (!o) return;
   let result;
   if (status === 'cancelled') {
-    if (!confirm(\`تأكيد إلغاء الطلب #\${o.order_no}؟ سيتم رد أي مبلغ مدفوع من المحفظة تلقائياً.\`)) return;
+    if (!confirm(`تأكيد إلغاء الطلب #${o.order_no}؟ سيتم رد أي مبلغ مدفوع من المحفظة تلقائياً.`)) return;
     result = await supabase.rpc('admin_cancel_order', { p_order_id: id, p_note: 'تم إلغاء الطلب من الإدارة' });
   } else {
     result = await supabase.rpc('admin_save_order_pricing', {
