@@ -749,7 +749,7 @@ function wireCustomerEvents() {
       deliveryZoneCheck = null;
       const address = document.querySelector('#oAddress');
       const mapLink = `📍 https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`;
-      address.value = address.value.replace(/\\s*\\|\\s*📍 https?:\\/\\/maps\\.google\\.com\\/\\?q=[^|]+/g,'').trim();
+      address.value = address.value.split(' | 📍 https://maps.google.com/?q=')[0].trim();
       address.value += (address.value ? ' | ' : '') + mapLink;
       const status = document.querySelector('#deliveryZoneCustomerStatus');
       if (status) status.textContent = 'جاري التحقق من منطقة التوصيل...';
