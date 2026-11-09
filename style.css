@@ -403,3 +403,8 @@ input:focus,textarea:focus,select:focus{
 .order-fulfillment-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:8px 0}.order-fulfillment-meta a{display:inline-flex;align-items:center;padding:6px 10px;border-radius:8px;background:var(--surface-2);color:inherit;text-decoration:none}
 
 .review-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 0;border-bottom:1px solid #e5e7eb}.review-row p{margin:6px 0}.review-row button{flex-shrink:0}@media(max-width:520px){.review-row{flex-direction:column}}
+
+
+/* Wallet, rewards and loyalty management */
+.wallet-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;background:linear-gradient(135deg,var(--surface-1),var(--surface-2))}.wallet-summary strong{display:block;font-size:clamp(1.8rem,5vw,2.6rem);color:var(--primary);margin-top:6px}.wallet-icon{font-size:2.8rem}.wallet-ledger-row,.reward-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid var(--border,#e5e7eb)}.wallet-ledger-row:last-child,.reward-row:last-child{border-bottom:0}.wallet-ledger-row small,.reward-row small{display:block;color:var(--muted,#64748b);font-size:.8rem;margin-top:4px;overflow-wrap:anywhere}.wallet-ledger-row strong{white-space:nowrap;color:var(--primary)}.inline-check{display:flex;align-items:center;gap:8px}.inline-check input{width:auto}
+@media(max-width:520px){.wallet-summary{padding:16px}.wallet-ledger-row,.reward-row{align-items:flex-start}.wallet-ledger-row strong{font-size:.9rem}}
