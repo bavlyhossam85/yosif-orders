@@ -1063,7 +1063,8 @@ async function addProduct(e) {
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
-    if (!up.error) image_url=supabase.storage.from('products').getPublicUrl(path).data.publicUrl
+    if (up.error) return toast('فشل رفع صورة المنتج: '+up.error.message,'error')
+    image_url=supabase.storage.from('products').getPublicUrl(path).data.publicUrl
   }
   const {error:insertError}=await supabase.from('products').insert({name,unit_price,unit,category_id,options,image_url,active:true})
   if(insertError) return toast(insertError.message,'error')
@@ -1085,7 +1086,8 @@ async function updateProduct(id) {
   if (file) {
     const path=`${crypto.randomUUID()}-${file.name.replace(/[^\w.\-]+/g,'_')}`
     const up=await supabase.storage.from('products').upload(path,file);
-    if (!up.error) updateData.image_url = supabase.storage.from('products').getPublicUrl(path).data.publicUrl
+    if (up.error) return toast('فشل رفع صورة المنتج: '+up.error.message,'error')
+    updateData.image_url = supabase.storage.from('products').getPublicUrl(path).data.publicUrl
   }
   await supabase.from('products').update(updateData).eq('id',id)
   toast('تم التعديل','success'); await render()
