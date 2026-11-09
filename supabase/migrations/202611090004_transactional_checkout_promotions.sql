@@ -165,7 +165,7 @@ begin
       insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
         values(v_order.customer_id,v_wallet_credit,v_wallet,auth.uid(),'reward_credit','إضافة مكافأة رصيد',p_order_id);
     end if;
-    if v_order.payment_method='wallet' then
+    if v_order.payment_method='wallet' and v_total>0 then
       if v_wallet < v_total then raise exception 'Insufficient wallet balance: required %, available %',v_total,v_wallet; end if;
       update public.wallets set balance=v_wallet-v_total,updated_at=now() where user_id=v_order.customer_id;
       insert into public.wallet_transactions(user_id,amount,balance_after,performed_by,transaction_type,description,order_id)
@@ -218,7 +218,7 @@ begin
     update public.orders set wallet_refunded_at=now(),wallet_used=0 where id=p_order_id;
   end if;
 
-  if v_order.coupon_id is not null then
+  if v_order.coupon_id is not null and v_order.status <> 'pending_review' then
     update public.coupons set used_count=greatest(0,coalesce(used_count,0)-1) where id=v_order.coupon_id;
   end if;
   if v_order.reward_id is not null then
