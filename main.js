@@ -38,6 +38,12 @@ let spinSettings = null
 let activeCoupons = []
 let adminProfiles = []
 let adminWallets = []
+let supportConversation = null
+let supportConversations = []
+let supportMessages = []
+let supportUnreadCount = 0
+let activeSupportConversationId = null
+let supportDragMoved = false
 
 // Register the app shell service worker without disturbing OneSignal's worker.
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(err => console.warn('PWA worker:', err)))
@@ -55,7 +61,7 @@ window.voiceBlob = null;
 
 // Push notifications are sent through the protected Vercel API.
 // The OneSignal REST API key is never returned to or stored in browser code.
-const ONESIGNAL_APP_ID = '97987044-7348-4399-bb86-eb5c8d9fa799';
+const ONESIGNAL_APP_ID = '6b3d2509-bbcb-4b13-8647-7f4999103f59';
 async function callOneSignalApi(payload) {
   const { data: authData, error: authError } = await supabase.auth.getSession();
   if (authError) throw authError;
@@ -318,6 +324,45 @@ async function loadCommon() {
     if (o.error) throw o.error
     orders = (o.data || []).filter(x => x.status !== 'deleted')
   }
+  // Support inbox is isolated from commerce data; missing migration never blocks checkout.
+  const conversationsQuery = isAdmin()
+    ? supabase.from('yosif_support_conversations').select('*').order('last_message_at', { ascending: false })
+    : supabase.from('yosif_support_conversations').select('*').eq('customer_id', session.user.id).maybeSingle()
+  const [conversationResult, unreadResult] = await Promise.all([
+    conversationsQuery,
+    supabase.from('yosif_support_messages').select('conversation_id,sender_id,read_at')
+  ])
+  supportConversations = conversationResult.error ? [] : (isAdmin() ? (conversationResult.data || []) : (conversationResult.data ? [conversationResult.data] : []))
+  supportConversation = isAdmin() ? null : (supportConversations[0] || null)
+  const unreadRows = unreadResult.error ? [] : (unreadResult.data || [])
+  supportUnreadCount = unreadRows.filter(m => !m.read_at && m.sender_id !== session.user.id).length
+  if (isAdmin() && !activeSupportConversationId && supportConversations.length) activeSupportConversationId = supportConversations[0].id
+  const selectedConversationId = isAdmin() ? activeSupportConversationId : supportConversation?.id
+  if (selectedConversationId && (isAdmin() || customerView === 'support' || adminView === 'support')) {
+    const { data: chatRows, error: chatError } = await supabase.from('yosif_support_messages').select('*').eq('conversation_id', selectedConversationId).order('created_at', { ascending: true })
+    supportMessages = chatError ? [] : (chatRows || [])
+    if (!chatError) {
+      const { error: readError } = await supabase.rpc('mark_yosif_support_read', { p_conversation_id: selectedConversationId })
+      if (readError) console.warn('Could not mark support messages read:', readError.message)
+      else supportUnreadCount = Math.max(0, supportUnreadCount - supportMessages.filter(m => !m.read_at && m.sender_id !== session.user.id).length)
+    }
+  } else supportMessages = []
+
+  // Keep a server-side reminder record for carts that remain untouched.
+  try {
+    if (!isAdmin() && cart.length) {
+      await supabase.from('yosif_abandoned_carts').upsert({
+        user_id: session.user.id,
+        cart_snapshot: cart.map(item => ({ product_id: item.product_id, quantity: Number(item.quantity || 1) })),
+        last_activity_at: new Date().toISOString(),
+        reminder_sent_at: null,
+        dismissed_at: null
+      }, { onConflict: 'user_id' })
+    } else if (!isAdmin()) {
+      await supabase.from('yosif_abandoned_carts').delete().eq('user_id', session.user.id)
+    }
+  } catch (reminderError) { console.warn('Cart reminder sync:', reminderError) }
+
   if (orders.length) {
     const itemsResult = await supabase.from('order_items').select('*').in('order_id', orders.map(o=>o.id))
     if (itemsResult.error) console.warn('Order item details are unavailable until the order_items RLS migration is applied.', itemsResult.error)
@@ -419,7 +464,7 @@ function shell(title, nav, content) {
     </aside>
     <main class="content"><div class="page-title"><h1>${title}</h1></div>${content}</main>
   </div>
-  ${!isAdmin() ? `<button type="button" id="cartQuickBtn" class="floating-cart" aria-label="فتح السلة">🛒 <span>${cart.reduce((n,x)=>n+Number(x.quantity||0),0)}</span></button>` : ''}`
+  ${!isAdmin() ? `<button type="button" id="cartQuickBtn" class="floating-cart" aria-label="فتح السلة">🛒 <span>${cart.reduce((n,x)=>n+Number(x.quantity||0),0)}</span></button><button type="button" id="supportFloatBtn" class="floating-support" aria-label="فتح الدعم">💬${supportUnreadCount ? `<span>${supportUnreadCount}</span>` : ''}</button>` : ''}`
   
   document.querySelector('#logoutBtn').onclick=logout
   document.querySelector('#notifBtn').onclick=showNotifications
@@ -453,15 +498,18 @@ function renderCustomer() {
   if (customerView==='orders') content=customerOrders()
   if (customerView==='new') content=newOrderView()
   if (customerView==='rewards') content=customerRewardsView()
+  if (customerView==='support') content=renderSupportChat()
   shell('Yosif Orders', [
     navBtn('home','🏠 الرئيسية',customerView==='home'),
     navBtn('products','🛍 المنتجات',customerView==='products'),
     navBtn('new','➕ طلب جديد',customerView==='new'),
     navBtn('orders','📦 طلباتي',customerView==='orders'),
-    navBtn('rewards','🎁 محفظتي ومكافآتي',customerView==='rewards')
+    navBtn('rewards','🎁 محفظتي ومكافآتي',customerView==='rewards'),
+    navBtn('support',`💬 الدعم الفني${supportUnreadCount ? ` (${supportUnreadCount})` : ''}`,customerView==='support')
   ].join(''), content)
   wireNav()
   wireCustomerEvents()
+  if (customerView==='support') wireSupportEvents()
 }
 
 function customerHome() {
@@ -965,15 +1013,18 @@ function renderAdmin() {
   if (adminView==='settings') content=adminSettings()
   if (adminView==='reviews') content=adminReviews()
   if (adminView==='loyalty') content=adminLoyalty()
+  if (adminView==='support') content=renderSupportChat()
   shell('لوحة الأدمن', [
     navBtn('dashboard','📊 الرئيسية',adminView==='dashboard'),
     navBtn('orders','📦 الطلبات',adminView==='orders'),
     navBtn('products','🛍️ المنتجات',adminView==='products'),
     navBtn('reviews','⭐ التقييمات',adminView==='reviews'),
     navBtn('loyalty','🎁 المحفظة والمكافآت',adminView==='loyalty'),
+    navBtn('support',`💬 رسائل العملاء${supportUnreadCount ? ` (${supportUnreadCount})` : ''}`,adminView==='support'),
     navBtn('settings','⚙️ الإعدادات',adminView==='settings')
   ].join(''), content)
   wireNav(); wireAdminEvents()
+  if (adminView==='support') wireSupportEvents()
 }
 
 function customerRewardsView() {
@@ -1141,7 +1192,7 @@ function adminSettings() {
   <div id="deliveryZoneMap" class="delivery-zone-map" role="application" aria-label="خريطة رسم مناطق التوصيل"></div>
   <p id="deliveryZoneStatus" class="muted" aria-live="polite">جاري تجهيز الخريطة...</p>
   <div id="deliveryZoneList" class="delivery-zone-list"></div></div>
-    <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="97987044-7348-4399-bb86-eb5c8d9fa799" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
+    <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="6b3d2509-bbcb-4b13-8647-7f4999103f59" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
   <div class="card"><h3>📣 إشعار جماعي للعملاء</h3><label>عنوان الإشعار</label><input id="broadcastTitle" maxlength="80" placeholder="عرض جديد من يوسف أوردرز"><label>نص الإشعار</label><textarea id="broadcastMessage" rows="3" maxlength="240" placeholder="اكتب رسالتك للعملاء..."></textarea><button class="primary" id="sendBroadcast">إرسال Push لكل العملاء</button><p class="muted">يتم الإرسال من خادم آمن، ولا يتم كشف مفتاح OneSignal داخل المتصفح.</p></div>`
 }
 
@@ -1452,6 +1503,79 @@ async function showNotifications() {
   }
 }
 
+
+async function ensureSupportConversation() {
+  if (isAdmin()) throw new Error('الأدمن يختار محادثة عميل أولاً.')
+  if (supportConversation?.id) return supportConversation
+  const { data: existing, error: findError } = await supabase.from('yosif_support_conversations').select('*').eq('customer_id', session.user.id).maybeSingle()
+  if (findError) throw findError
+  if (existing) { supportConversation = existing; return existing }
+  const { data, error } = await supabase.from('yosif_support_conversations').insert({ customer_id: session.user.id }).select('*').single()
+  if (error) {
+    const retry = await supabase.from('yosif_support_conversations').select('*').eq('customer_id', session.user.id).maybeSingle()
+    if (retry.data) { supportConversation = retry.data; return retry.data }
+    throw error
+  }
+  supportConversation = data
+  supportConversations = [data]
+  return data
+}
+
+function renderSupportChat() {
+  const selectedId = isAdmin() ? activeSupportConversationId : supportConversation?.id
+  const selected = supportConversations.find(x => x.id === selectedId) || supportConversation
+  const messages = supportMessages.filter(m => m.conversation_id === selectedId)
+  const list = isAdmin() ? `<aside class="support-threads">${supportConversations.map(thread => {
+    const customer = adminProfiles.find(p => p.id === thread.customer_id)
+    const unread = messages.filter(m => m.conversation_id === thread.id && !m.read_at && m.sender_id !== session.user.id).length
+    return `<button class="support-thread ${thread.id===selectedId?'active':''}" data-chat-open="${thread.id}"><b>${esc(customer?.email || thread.customer_id.slice(0,8))}</b><small>${fmtDate(thread.last_message_at || thread.created_at)}</small>${unread? `<span class="badge">${unread}</span>` : ''}</button>`
+  }).join('') || '<div class="empty">لا توجد محادثات حتى الآن.</div>'}</aside>` : ''
+  return `<section class="support-layout">${list}<div class="support-panel"><div class="section-head"><h3>💬 ${isAdmin() ? (selected ? 'محادثة العميل' : 'اختر محادثة') : 'الدعم الفني'}</h3><small class="muted">${selected ? 'رسائل خاصة بينك وبين إدارة المتجر' : ''}</small></div>
+    <div id="supportMessages" class="support-messages">${messages.map(m=>`<div class="support-message ${m.sender_id===session.user.id?'mine':'theirs'}"><p>${esc(m.body)}</p><small>${fmtDate(m.created_at)} ${m.read_at && m.sender_id===session.user.id?'· تمت القراءة':''}</small></div>`).join('') || '<div class="empty">ابدأ المحادثة واكتب رسالتك هنا.</div>'}</div>
+    <form id="supportMessageForm" class="support-compose" ${isAdmin()&&!selected?'hidden':''}><textarea id="supportMessageInput" rows="2" maxlength="2000" required placeholder="اكتب رسالتك..."></textarea><button class="primary" type="submit">إرسال</button></form>
+  </div></section>`
+}
+
+async function sendSupportMessage(event) {
+  event.preventDefault()
+  const input = document.querySelector('#supportMessageInput')
+  const body = input?.value.trim()
+  if (!body) return
+  const button = document.querySelector('#supportMessageForm button')
+  button.disabled = true
+  try {
+    const conversation = isAdmin()
+      ? supportConversations.find(x => x.id === activeSupportConversationId)
+      : await ensureSupportConversation()
+    if (!conversation) throw new Error('اختر محادثة عميل أولاً.')
+    const { data: message, error } = await supabase.from('yosif_support_messages')
+      .insert({ conversation_id: conversation.id, sender_id: session.user.id, body })
+      .select('*').single()
+    if (error) throw error
+    input.value = ''
+    const push = await callOneSignalApi({ action: 'send', event_type: 'chat_message', message_id: message.id, app_id: ONESIGNAL_APP_ID })
+    if (!push?.success) toast('تم إرسال الرسالة داخل المحادثة، لكن تعذر إرسال Push.', 'info')
+    await render()
+  } catch (error) { toast(error.message || 'تعذر إرسال الرسالة', 'error') }
+  finally { if (button) button.disabled = false }
+}
+
+function wireSupportEvents() {
+  document.querySelector('#supportMessageForm')?.addEventListener('submit', sendSupportMessage)
+  document.querySelectorAll('[data-chat-open]').forEach(button => button.addEventListener('click', async () => {
+    activeSupportConversationId = button.dataset.chatOpen
+    await render()
+  }))
+  const floating = document.querySelector('#supportFloatBtn')
+  if (floating) {
+    let startX=0, startY=0, originX=0, originY=0, dragging=false
+    floating.addEventListener('pointerdown', e => { dragging=true; supportDragMoved=false; startX=e.clientX; startY=e.clientY; const rect=floating.getBoundingClientRect(); originX=rect.left; originY=rect.top; floating.setPointerCapture(e.pointerId) })
+    floating.addEventListener('pointermove', e => { if(!dragging)return; const dx=e.clientX-startX, dy=e.clientY-startY; if(Math.abs(dx)+Math.abs(dy)>5)supportDragMoved=true; if(supportDragMoved){floating.style.left=Math.max(8,Math.min(innerWidth-floating.offsetWidth-8,originX+dx))+'px';floating.style.top=Math.max(72,Math.min(innerHeight-floating.offsetHeight-8,originY+dy))+'px';floating.style.right='auto';floating.style.bottom='auto'} })
+    floating.addEventListener('pointerup', () => { dragging=false })
+    floating.addEventListener('click', () => { if(supportDragMoved){supportDragMoved=false;return} customerView='support';renderCustomer() })
+  }
+}
+
 function toggleTheme() {
   document.documentElement.classList.toggle('dark')
   localStorage.setItem('yosif_theme',document.documentElement.classList.contains('dark')?'dark':'light')
@@ -1464,6 +1588,7 @@ function subscribeRealtime() {
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'orders'},async()=>{ if (isAdmin()) adminBeep(); await render() })
     .on('postgres_changes',{event:'UPDATE',schema:'public',table:'orders'},async()=>{ await render() })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'notifications',filter:`user_id=eq.${session.user.id}`},async()=>{ if (!isAdmin()) beep(); await render() })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'yosif_support_messages'},async(payload)=>{ if(payload.new?.sender_id!==session.user.id) beep(); await render() })
     .subscribe()
   realtimeChannels=[channel]
 }
