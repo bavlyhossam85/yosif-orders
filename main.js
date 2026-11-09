@@ -1175,7 +1175,8 @@ async function showNotifications() {
   document.querySelector('#nmodal').addEventListener('click', e => { if(e.target.id==='nmodal') document.querySelector('#nmodal')?.remove() })
   document.querySelector('#nclose').onclick=async()=>{
     document.querySelector('#nmodal').remove();
-    await supabase.from('notifications').update({read_at: new Date().toISOString()}).eq('user_id',session.user.id).is('read_at', null);
+    const { error } = await supabase.rpc('mark_my_notifications_read')
+    if (error) return toast(error.message,'error')
     notifications=notifications.map(n=>({...n, read_at: n.read_at || new Date().toISOString()}));
     document.querySelector('.badge').textContent=''
   }
