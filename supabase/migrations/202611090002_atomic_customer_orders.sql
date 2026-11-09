@@ -27,6 +27,7 @@ declare
   v_item jsonb;
   v_product public.products%rowtype;
   v_qty numeric;
+  v_unit_price numeric(12,2);
   v_count integer := 0;
 begin
   if v_user is null then raise exception 'Authentication required'; end if;
@@ -65,7 +66,15 @@ begin
     for share;
 
     if not found then raise exception 'Product unavailable'; end if;
-    v_subtotal := v_subtotal + (v_product.unit_price * v_qty);
+    v_unit_price := case
+      when v_product.is_flash_sale = true
+        and v_product.sale_price is not null
+        and (v_product.sale_starts_at is null or v_product.sale_starts_at <= now())
+        and (v_product.sale_ends_at is null or v_product.sale_ends_at > now())
+      then v_product.sale_price
+      else v_product.unit_price
+    end;
+    v_subtotal := v_subtotal + (v_unit_price * v_qty);
   end loop;
 
   insert into public.orders (
@@ -91,13 +100,21 @@ begin
     where id = (v_item->>'product_id')::uuid and active = true
     for share;
 
+    v_unit_price := case
+      when v_product.is_flash_sale = true
+        and v_product.sale_price is not null
+        and (v_product.sale_starts_at is null or v_product.sale_starts_at <= now())
+        and (v_product.sale_ends_at is null or v_product.sale_ends_at > now())
+      then v_product.sale_price
+      else v_product.unit_price
+    end;
     insert into public.order_items (
       order_id, product_id, quantity, unit_price, selected_options,
       line_total, item_note, product_name
     ) values (
-      v_order_id, v_product.id, v_qty, v_product.unit_price,
+      v_order_id, v_product.id, v_qty, v_unit_price,
       coalesce(v_item->'selected_options','{}'::jsonb),
-      v_product.unit_price * v_qty,
+      v_unit_price * v_qty,
       nullif(left(coalesce(v_item->>'item_note',''),500),''),
       v_product.name
     );
