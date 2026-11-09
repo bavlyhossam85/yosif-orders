@@ -29,8 +29,8 @@
 
 ## Still incomplete or not verified
 - Animated add-to-cart/cart interactions and option-specific price adjustments.
-- Multi-polygon delivery-zone editor and authoritative server-side point-in-polygon checks; precise customer/admin map pin workflows.
-- Customer wallet balance and ledger view, daily wheel spin, and admin wallet adjustment/set-balance plus wheel configuration UI are now wired to the RPCs from migration 003. Wallet checkout debit/refund, idempotent cancellation refunds, coupon validation/redemption, and applying discount/free-delivery rewards at checkout remain incomplete. Active coupons are displayed to customers but cannot yet be redeemed.
+- Multi-polygon delivery-zone editor, authoritative server-side coverage checks, customer GPS validation, and admin polygon/circle rendering plus zone CRUD have been added on this branch. Requires migration 005 and browser verification.
+- Wallet/rewards UI and checkout coupon/reward selection are wired to migrations 003 and 004. Live Supabase transaction behavior still requires testing.
 - Full installment/tab eligibility, schedule generation, payment ledger, and settlement workflows.
 - Persistent customer/admin chat, attachment/voice messages, unread counters, and OneSignal chat notifications.
 - Server-scheduled abandoned-cart reminders.
@@ -55,7 +55,7 @@
 ## Latest UI integration (audit branch, not deployed)
 - Customer navigation now includes a wallet/rewards screen with current balance, recent ledger entries, unredeemed rewards, active coupon visibility, and a daily-spin action calling `spin_customer_wheel`.
 - Admin navigation now includes loyalty controls: enable/disable the wheel, set the daily limit, edit reward JSON, and adjust/replace a selected customer's wallet balance through the protected RPCs. It also lists customer wallet balances.
-- Customer checkout now allows selecting an active coupon and an unused reward; selections are attached through `set_order_promotions`. Admin first-pricing calls `admin_save_order_pricing`, which recalculates coupon/reward discounts and payment fees server-side and debits wallet payments transactionally. Admin cancellation calls `admin_cancel_order`, which refunds wallet debits once and restores redeemed coupon/reward usage. These RPCs are in migration `202611090004_transactional_checkout_promotions.sql`, which is prepared on the audit branch but has NOT been applied to Supabase yet.
+- Customer checkout now allows selecting an active coupon and an unused reward; selections are attached through `set_order_promotions`. Admin first-pricing calls `admin_save_order_pricing`, which recalculates coupon/reward discounts and payment fees server-side and debits wallet payments transactionally. Admin cancellation calls `admin_cancel_order`, which refunds wallet debits once and restores redeemed coupon/reward usage. These RPCs are in migration `202611090004_transactional_checkout_promotions.sql`, which the user confirmed applying.
 - No production deployment or live database changes were made by these UI commits.
 
 
@@ -65,4 +65,4 @@
 - Added `admin_cancel_order` to lock and cancel the order, refund wallet debits once using `wallet_refunded_at`, and restore coupon usage/reward availability where applicable.
 - Updated the customer checkout UI with coupon and reward selectors, and changed admin order saving to use the protected pricing/cancellation RPCs instead of direct order-total updates.
 - Updated `spin_customer_wheel` in migration 004 so percentage rewards use the existing `customer_rewards.reward_type='percentage_discount'` CHECK value rather than the unsupported literal `discount`.
-- Migration 004 is a manual SQL step and has not been applied or runtime-tested. No production deployment or live database changes were made.
+- Migration 004 was reported applied by the user; its live runtime behavior has not yet been verified. No production deployment was made.
