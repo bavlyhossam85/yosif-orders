@@ -199,6 +199,7 @@ begin
   if v_order.status='cancelled' then
     return jsonb_build_object('success',true,'already_cancelled',true,'refunded',false);
   end if;
+  if v_order.status='delivered' then raise exception 'Delivered orders cannot be cancelled through this flow'; end if;
 
   if coalesce(v_order.wallet_used,0)>0 and v_order.wallet_refunded_at is null then
     insert into public.wallets(user_id,balance) values(v_order.customer_id,0)
