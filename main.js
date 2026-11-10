@@ -38,7 +38,7 @@ window.voiceBlob = null;
 
 // Push notifications are sent through the protected Vercel API.
 // The OneSignal REST API key is never returned to or stored in browser code.
-const ONESIGNAL_APP_ID = '97987044-7348-4399-bb86-eb5c8d9fa799';
+const ONESIGNAL_APP_ID = '6b3d2509-bbcb-4b13-8647-7f4999103f59';
 async function callOneSignalApi(payload) {
   const { data: authData, error: authError } = await supabase.auth.getSession();
   if (authError) throw authError;
@@ -839,7 +839,7 @@ function adminSettings() {
   <div><label>QR المحفظة</label><input id="walletQrFile" type="file" accept="image/*">${w?`<img class="setting-img" src="${esc(w)}">`:''}</div></div>
   <label>رقم WhatsApp والمحفظة</label><input id="waNumber" value="${esc(wa)}" placeholder="2010xxxxxxxx">
   <button class="primary" id="saveSettings">حفظ الإعدادات</button></div>
-  <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="97987044-7348-4399-bb86-eb5c8d9fa799" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
+  <div class="card"><h3>🔐 إعدادات OneSignal</h3><label>OneSignal App ID</label><input value="6b3d2509-bbcb-4b13-8647-7f4999103f59" readonly><label>REST API Key</label><input id="oneSignalRestKey" type="password" autocomplete="new-password" placeholder="الصق المفتاح هنا — لن يتم عرضه مرة أخرى"><div class="actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="primary" id="saveOneSignalKey">حفظ المفتاح</button><button class="secondary" id="testOneSignalKey">اختبار الاتصال</button></div><p class="muted">المفتاح يُشفّر على الخادم ولا يُرسل إلى المتصفح عند قراءته. اترك الحقل فارغًا إذا كنت لا تريد تغيير المفتاح المحفوظ.</p><p id="oneSignalKeyStatus" class="muted" aria-live="polite"></p></div>
   <div class="card"><h3>📣 إشعار جماعي للعملاء</h3><label>عنوان الإشعار</label><input id="broadcastTitle" maxlength="80" placeholder="عرض جديد من يوسف أوردرز"><label>نص الإشعار</label><textarea id="broadcastMessage" rows="3" maxlength="240" placeholder="اكتب رسالتك للعملاء..."></textarea><button class="primary" id="sendBroadcast">إرسال Push لكل العملاء</button><p class="muted">يتم الإرسال من خادم آمن، ولا يتم كشف مفتاح OneSignal داخل المتصفح.</p></div>`
 }
 
