@@ -34,15 +34,17 @@ export default async function handler(req, res) {
     if (authError || !authData.user) return json(res, 401, { error: 'جلسة الدخول غير صالحة؛ سجّل الدخول مرة أخرى.' });
     const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     const { data: profile, error: profileError } = await admin.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
-    if (profileError || profile?.role !== 'admin') return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
+    if (profileError) throw profileError;
+    const isAdmin = profile?.role === 'admin';
     const { action, app_id, rest_api_key, event_type, order_id, title, message } = req.body || {};
-    if (app_id !== '97987044-7348-4399-bb86-eb5c8d9fa799') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
+    if (app_id !== '6b3d2509-bbcb-4b13-8647-7f4999103f59') return json(res, 400, { error: 'OneSignal App ID غير مطابق لإعدادات المشروع.' });
+    if ((action === 'save_key' || action === 'test') && !isAdmin) return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
 
     if (action === 'save_key') {
       const key = String(rest_api_key || '').trim();
       if (key.length < 20 || key.length > 500) return json(res, 400, { error: 'REST API Key غير صالح؛ راجع القيمة.' });
       const encrypted = encryptSecret(key);
-      const existing = await admin.from('settings').select('key').eq('key', 'onesignal_rest_api_key_encrypted').maybeSingle();
+      const existing = await admin.from('settings').select('key').eq('key', 'onesignal_rest_api_key_encrypted').limit(1).maybeSingle();
       if (existing.error) throw existing.error;
       const write = existing.data
         ? await admin.from('settings').update({ value: encrypted }).eq('key', 'onesignal_rest_api_key_encrypted')
@@ -77,6 +79,7 @@ export default async function handler(req, res) {
       notificationTitle = 'طلب جديد 🛍️';
       notificationBody = 'تم استلام طلب جديد رقم #' + order.order_no;
     } else if (event_type === 'order_updated') {
+      if (!isAdmin) return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
       const { data: order, error } = await admin.from('orders').select('id,customer_id,order_no').eq('id', order_id).maybeSingle();
       if (error) throw error;
       if (!order) return json(res, 404, { error: 'Order not found' });
@@ -84,6 +87,7 @@ export default async function handler(req, res) {
       notificationTitle = 'تحديث الطلب 🛍️';
       notificationBody = 'تم تحديث حالة طلبك #' + order.order_no;
     } else if (event_type === 'broadcast') {
+      if (!isAdmin) return json(res, 403, { error: 'هذه العملية متاحة للأدمن فقط.' });
       if (!notificationTitle || !notificationBody) return json(res, 400, { error: 'اكتب عنوان الإشعار ونص الرسالة.' });
       const { data: customers, error } = await admin.from('profiles').select('id').neq('role', 'admin');
       if (error) throw error;
