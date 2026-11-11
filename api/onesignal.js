@@ -53,7 +53,7 @@ export default async function handler(req, res) {
       return json(res, 200, { success: true });
     }
 
-    const { data: setting, error: settingError } = await admin.from('settings').select('value').eq('key', 'onesignal_rest_api_key_encrypted').maybeSingle();
+    const { data: setting, error: settingError } = await admin.from('settings').select('value').eq('key', 'onesignal_rest_api_key_encrypted').limit(1).maybeSingle();
     if (settingError) throw settingError;
     if (!setting?.value) return json(res, 400, { error: 'أضف REST API Key واحفظه أولاً.' });
     const restKey = decryptSecret(setting.value);
