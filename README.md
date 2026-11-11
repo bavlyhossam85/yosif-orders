@@ -17,25 +17,23 @@ npm run dev
 4. The browser-safe Supabase URL and publishable key are in `config.js`. They can be overridden with `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` environment variables.
 5. Deploy.
 
-## OneSignal Push (required server setup)
+## OneSignal Push (Vercel server setup)
 
-The OneSignal REST key must never be stored in `main.js`, `index.html`, `config.js`, or any `VITE_` variable. The client calls the included authenticated Supabase Edge Function instead.
+The current browser client sends push requests to the authenticated Vercel serverless endpoint at `/api/onesignal`. The OneSignal REST API key must never be stored in `main.js`, `index.html`, `config.js`, or any `VITE_` variable.
 
-Deploy the function to the Supabase project referenced by `config.js` and set these server secrets:
+Configure these server-side environment variables in Vercel (Production and Preview/Staging as appropriate):
 
-- `ONESIGNAL_APP_ID` = the Yosif OneSignal App ID already configured in `index.html`
-- `ONESIGNAL_REST_API_KEY` = a newly generated OneSignal REST API key
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY` or `SUPABASE_ANON_KEY`
+- `SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`
 
-Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` to deployed Edge Functions. Deploy with:
+The server validates the Supabase bearer token, checks the caller's profile role and order ownership, and encrypts the admin-supplied OneSignal REST API key with AES-256-GCM before storing it in the `settings` table. The encryption key is derived from the server-only Supabase secret. Never prefix server secrets with `VITE_` or expose their values in client code or logs. If the Supabase server secret used for encryption is rotated, save the OneSignal REST API key again from the admin settings.
 
-```bash
-supabase functions deploy send-onesignal-push
-supabase secrets set ONESIGNAL_APP_ID=YOUR_APP_ID ONESIGNAL_REST_API_KEY=YOUR_NEW_REST_API_KEY
-```
+The Supabase Edge Function under `supabase/functions/send-onesignal-push` is retained in the repository as a legacy implementation; the current `main.js` client calls the Vercel API route.
 
-**Security action:** the uploaded source contained a OneSignal REST API key in browser JavaScript. Treat that key as compromised and rotate/revoke it in OneSignal before enabling production push. The exposed value has been removed from this project.
+**Security action:** an earlier uploaded source contained a OneSignal REST API key in browser JavaScript. Treat that old key as compromised and rotate/revoke it in OneSignal before enabling production push. The exposed value has been removed from this project.
 
-The function authorizes `order_created` only for the order owner, and `order_updated` / `broadcast` only for an admin profile. OneSignal identifies subscribers using the Supabase user ID via `OneSignal.login(user.id)`.
+The Vercel API authorizes `order_created` only for the order owner, and `order_updated` / `broadcast` only for an admin profile. OneSignal subscribers are identified by the Supabase user ID via `OneSignal.login(user.id)`.
 
 ## PWA
 
